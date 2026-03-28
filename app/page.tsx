@@ -29,7 +29,7 @@ export default function LandingPage() {
     if (status === "authenticated") router.replace("/dashboard");
   }, [status, router]);
 
-  const handleGoogle = () => signIn("google", { callbackUrl: "/dashboard" });
+  const handleGoogle = () => signIn("google", { callbackUrl: "/init" });
 
   return (
     <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>

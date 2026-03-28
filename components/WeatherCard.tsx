@@ -62,14 +62,14 @@ export default function WeatherCard({ data }: { data: WeatherData }) {
         </div>
         <div className="bg-white/10 rounded-xl p-3 text-center">
           <p className="text-[#BCBDE8] text-xs">Wind</p>
-          <p className="font-semibold text-sm mt-0.5">{data.wind.speed} m/s</p>
+          <p className="font-semibold text-sm mt-0.5">{Math.round(data.wind.speed * 2.237)} mph</p>
         </div>
       </div>
 
       <div className="mt-3 flex justify-between text-sm text-[#BCBDE8]">
         <span>H: {Math.round(data.main.temp_max)}°C</span>
         <span>L: {Math.round(data.main.temp_min)}°C</span>
-        <span>Visibility: {(data.visibility / 1000).toFixed(1)} km</span>
+        <span>Visibility: {(data.visibility / 1609.34).toFixed(1)} mi</span>
       </div>
     </div>
   );

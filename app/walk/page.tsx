@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { aiBriefings, breathingMessages, quotes } from "@/lib/mock-data";
 import { BurnoutScore, WalkPhase } from "@/lib/types";
+import { AppCache } from "@/lib/app-cache";
 
 interface Trail {
   id: string; name: string; distance: string; duration: number;
@@ -12,14 +13,62 @@ interface Trail {
   mapBg: string; mapPath: string; dotX: number; dotY: number;
 }
 
-const TRAILS: Trail[] = [
-  { id: "riverside", name: "Riverside Loop Park",  distance: "1.2 km", duration: 18, difficulty: "Easy",        tags: ["🚶 8 min walk", "🔄 Loop trail", "⛅ 72°F", "💨 Light breeze"], description: "A peaceful riverside loop for a quick mental reset.",                 color: "#6367FF", mapBg: "#0d2218", mapPath: "M230 178 Q230 42 224 42 Q158 42 136 88 Q114 134 140 178 Q178 200 230 178",                                              dotX: 230, dotY: 178 },
-  { id: "greenfield", name: "Greenfield Trail",     distance: "2.4 km", duration: 32, difficulty: "Moderate",    tags: ["🌲 Forest path", "↗ Gentle incline", "🐦 Wildlife"],            description: "A shaded forest path, great for a mindful mid-day escape.",         color: "#22c55e", mapBg: "#0d1f0e", mapPath: "M80 180 Q90 80 160 60 Q240 40 295 105 Q325 150 295 180 Q235 212 155 192 Q100 178 80 180",                             dotX: 80,  dotY: 180 },
-  { id: "harbor",     name: "Harbor Promenade",     distance: "1.8 km", duration: 24, difficulty: "Easy",        tags: ["🌊 Waterfront", "🌅 Scenic views", "🏃 Flat path"],              description: "Walk along the harbour for an instantly calming experience.",        color: "#0ea5e9", mapBg: "#080f1f", mapPath: "M55 115 Q118 72 200 78 Q282 84 342 112 Q328 162 248 176 Q162 186 80 165 Q48 145 55 115",                             dotX: 342, dotY: 112 },
-  { id: "hilltop",    name: "Hilltop View Path",    distance: "3.1 km", duration: 45, difficulty: "Challenging", tags: ["⛰️ Elevation", "🌄 Summit views", "💪 Cardio boost"],            description: "A rewarding climb with panoramic views at the top.",                color: "#f59e0b", mapBg: "#1a1200", mapPath: "M100 190 Q122 140 162 92 Q202 50 252 68 Q302 92 312 148 Q318 196 262 210 Q182 225 100 190",                          dotX: 100, dotY: 190 },
-  { id: "meadow",     name: "Meadow Stroll",        distance: "1.0 km", duration: 14, difficulty: "Easy",        tags: ["🌸 Open meadow", "☀️ Sunny", "🧘 Calm pace"],                   description: "A short open-air stroll — perfect when you only have 15 minutes.", color: "#c026d3", mapBg: "#180d1e", mapPath: "M100 140 Q150 80 220 90 Q290 100 310 140 Q290 185 220 192 Q148 200 100 140",                                          dotX: 220, dotY: 192 },
+// ── Static fallback trails (used if location is denied) ─────────────────────
+const FALLBACK_TRAILS: Trail[] = [
+  { id: "riverside", name: "Riverside Loop Park",  distance: "0.7 mi", duration: 18, difficulty: "Easy",        tags: ["🚶 8 min walk", "🔄 Loop trail", "⛅ 72°F"], description: "A peaceful riverside loop for a quick mental reset.",                 color: "#6367FF", mapBg: "#0d2218", mapPath: "M230 178 Q230 42 224 42 Q158 42 136 88 Q114 134 140 178 Q178 200 230 178",                                              dotX: 230, dotY: 178 },
+  { id: "greenfield", name: "Greenfield Trail",     distance: "1.5 mi", duration: 32, difficulty: "Moderate",    tags: ["🌲 Forest path", "↗ Gentle incline", "🐦 Wildlife"],            description: "A shaded forest path, great for a mindful mid-day escape.",         color: "#22c55e", mapBg: "#0d1f0e", mapPath: "M80 180 Q90 80 160 60 Q240 40 295 105 Q325 150 295 180 Q235 212 155 192 Q100 178 80 180",                             dotX: 80,  dotY: 180 },
+  { id: "harbor",     name: "Harbor Promenade",     distance: "1.1 mi", duration: 24, difficulty: "Easy",        tags: ["🌊 Waterfront", "🌅 Scenic views", "🏃 Flat path"],              description: "Walk along the harbour for an instantly calming experience.",        color: "#0ea5e9", mapBg: "#080f1f", mapPath: "M55 115 Q118 72 200 78 Q282 84 342 112 Q328 162 248 176 Q162 186 80 165 Q48 145 55 115",                             dotX: 342, dotY: 112 },
+  { id: "hilltop",    name: "Hilltop View Path",    distance: "1.9 mi", duration: 45, difficulty: "Challenging", tags: ["⛰️ Elevation", "🌄 Summit views", "💪 Cardio boost"],            description: "A rewarding climb with panoramic views at the top.",                color: "#f59e0b", mapBg: "#1a1200", mapPath: "M100 190 Q122 140 162 92 Q202 50 252 68 Q302 92 312 148 Q318 196 262 210 Q182 225 100 190",                          dotX: 100, dotY: 190 },
+  { id: "meadow",     name: "Meadow Stroll",        distance: "0.6 mi", duration: 14, difficulty: "Easy",        tags: ["🌸 Open meadow", "☀️ Sunny", "🧘 Calm pace"],                   description: "A short open-air stroll — perfect when you only have 15 minutes.", color: "#c026d3", mapBg: "#180d1e", mapPath: "M100 140 Q150 80 220 90 Q290 100 310 140 Q290 185 220 192 Q148 200 100 140",                                          dotX: 220, dotY: 192 },
 ];
 
+// ── Map park → Trail ─────────────────────────────────────────────────────────
+const PARK_COLORS = ["#6367FF", "#22c55e", "#0ea5e9", "#f59e0b", "#c026d3"];
+const MAP_BG_LIST = ["#0d2218", "#0d1f0e", "#080f1f", "#1a1200", "#180d1e"];
+const MAP_PATHS   = [
+  "M230 178 Q230 42 224 42 Q158 42 136 88 Q114 134 140 178 Q178 200 230 178",
+  "M80 180 Q90 80 160 60 Q240 40 295 105 Q325 150 295 180 Q235 212 155 192 Q100 178 80 180",
+  "M55 115 Q118 72 200 78 Q282 84 342 112 Q328 162 248 176 Q162 186 80 165 Q48 145 55 115",
+  "M100 190 Q122 140 162 92 Q202 50 252 68 Q302 92 312 148 Q318 196 262 210 Q182 225 100 190",
+  "M100 140 Q150 80 220 90 Q290 100 310 140 Q290 185 220 192 Q148 200 100 140",
+];
+const DOT_POS = [
+  { x: 230, y: 178 }, { x: 80, y: 180 }, { x: 342, y: 112 }, { x: 100, y: 190 }, { x: 220, y: 192 },
+];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapParkToTrail(park: any, idx: number): Trail {
+  const name       = park.tags?.name || park.tags?.["name:en"] || "Nearby Park";
+  const distM      = park.distance as number;             // metres from user
+  const loopM      = Math.round(distM * 2 + 600);        // rough walk loop (metres)
+  const distMi     = (loopM / 1609.34).toFixed(1);
+  const duration   = Math.max(10, Math.round(loopM / 80));
+  const difficulty: Trail["difficulty"] = duration < 20 ? "Easy" : duration < 35 ? "Moderate" : "Challenging";
+  const walkMin    = Math.round(distM / 80);
+  const ci         = idx % PARK_COLORS.length;
+
+  const description =
+    park.googleDescription ||
+    park.tags?.description ||
+    `A ${difficulty.toLowerCase()} walk — ${walkMin} min from your location.`;
+
+  return {
+    id:         String(park.id),
+    name,
+    distance:   `${distMi} mi`,
+    duration,
+    difficulty,
+    tags:       [`🚶 ${walkMin} min away`, "📍 Nearby", difficulty === "Easy" ? "🌿 Easy pace" : difficulty === "Moderate" ? "🌲 Moderate" : "⛰️ Challenging"],
+    description,
+    color:      PARK_COLORS[ci],
+    mapBg:      MAP_BG_LIST[ci],
+    mapPath:    MAP_PATHS[ci],
+    dotX:       DOT_POS[ci].x,
+    dotY:       DOT_POS[ci].y,
+  };
+}
+
+// ── Visual components ────────────────────────────────────────────────────────
 const DIFF_STYLE: Record<string, { bg: string; color: string }> = {
   Easy:        { bg: "rgba(34,197,94,0.15)",  color: "#22c55e" },
   Moderate:    { bg: "rgba(245,158,11,0.15)", color: "#f59e0b" },
@@ -108,17 +157,96 @@ function Ring({ remaining, total }: { remaining: number; total: number }) {
   );
 }
 
+// ── Main page ────────────────────────────────────────────────────────────────
 export default function WalkPage() {
   const router = useRouter();
+
+  const [trails, setTrails]           = useState<Trail[]>(FALLBACK_TRAILS);
+  const [loadingParks, setLoadingParks] = useState(true);
+  const [locationStatus, setLocationStatus] = useState<"pending" | "granted" | "denied" | "error">("pending");
+
   const [phase, setPhase]             = useState<WalkPhase>("trail");
-  const [selectedTrail, setSelected]  = useState<Trail>(TRAILS[0]);
+  const [selectedTrail, setSelected]  = useState<Trail>(FALLBACK_TRAILS[0]);
   const [beforeMood, setBeforeMood]   = useState<number | null>(null);
   const [afterMood, setAfterMood]     = useState<number | null>(null);
-  const [remaining, setRemaining]     = useState(TRAILS[0].duration * 60);
+  const [remaining, setRemaining]     = useState(FALLBACK_TRAILS[0].duration * 60);
   const [running, setRunning]         = useState(false);
   const [breathIdx, setBreathIdx]     = useState(0);
   const [saved, setSaved]             = useState(false);
   const quoteRef = useRef(quotes[Math.floor(Math.random() * quotes.length)]);
+
+  // Fetch nearby parks via geolocation
+  const fetchNearbyParks = (lat: number, lon: number) => {
+    setLoadingParks(true);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+
+    fetch(`/api/parks?lat=${lat}&lon=${lon}&radius=5000`, { signal: controller.signal })
+      .then(r => r.json())
+      .then(data => {
+        clearTimeout(timer);
+        const elements = data.elements ?? [];
+        // filter parks that have a name
+        const named = elements.filter((p: any) => p.tags?.name || p.tags?.["name:en"]);
+        const source = named.length > 0 ? named : elements;
+        if (source.length > 0) {
+          const mapped: Trail[] = source.slice(0, 5).map(mapParkToTrail);
+          setTrails(mapped);
+          setSelected(mapped[0]);
+          setRemaining(mapped[0].duration * 60);
+          setLocationStatus("granted");
+        } else {
+          // API worked but no parks found nearby — keep fallbacks, show message
+          setLocationStatus("error");
+        }
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        setLocationStatus("error");
+      })
+      .finally(() => setLoadingParks(false));
+  };
+
+  useEffect(() => {
+    // Try cache first — instant, no geolocation prompt needed
+    const cachedParks = AppCache.get<{ elements: any[] }>("parks");
+    const cachedLoc   = AppCache.get<{ lat: number; lon: number }>("location");
+
+    if (cachedParks?.elements?.length) {
+      const named  = cachedParks.elements.filter(p => p.tags?.name || p.tags?.["name:en"]);
+      const source = named.length > 0 ? named : cachedParks.elements;
+      const mapped: Trail[] = source.slice(0, 5).map(mapParkToTrail);
+      setTrails(mapped);
+      setSelected(mapped[0]);
+      setRemaining(mapped[0].duration * 60);
+      setLocationStatus("granted");
+      setLoadingParks(false);
+      return;
+    }
+
+    // Cache miss: ask for geolocation and fetch
+    if (!navigator.geolocation) {
+      setLoadingParks(false);
+      setLocationStatus("denied");
+      return;
+    }
+
+    const startFetch = (lat: number, lon: number) => {
+      AppCache.set("location", { lat, lon });
+      fetchNearbyParks(lat, lon);
+    };
+
+    if (cachedLoc) {
+      startFetch(cachedLoc.lat, cachedLoc.lon);
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => startFetch(pos.coords.latitude, pos.coords.longitude),
+        () => { setLocationStatus("denied"); setLoadingParks(false); },
+        { timeout: 10000, maximumAge: 60000 }
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const totalSeconds = selectedTrail.duration * 60;
 
@@ -152,7 +280,7 @@ export default function WalkPage() {
 
   const elapsed = totalSeconds - remaining;
   const steps   = Math.round(elapsed * 1.4);
-  const km      = (steps * 0.0007).toFixed(2);
+  const miles   = (steps * 0.000435).toFixed(2);   // ~0.7m/step ÷ 1609m/mi
   const cal     = Math.round(elapsed * 0.08);
   const diff    = DIFF_STYLE[selectedTrail.difficulty];
 
@@ -176,10 +304,37 @@ export default function WalkPage() {
 
         <TrailMap trail={selectedTrail} />
 
+        {/* Trail list */}
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: "var(--fg-muted)" }}>Choose a Trail</p>
+          <div className="flex items-center justify-between mb-3 gap-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Choose a Trail</p>
+            <div className="shrink-0 text-right">
+              {loadingParks && (
+                <span className="text-[10px] animate-pulse" style={{ color: "var(--fg-muted)" }}>📡 Finding nearby parks…</span>
+              )}
+              {!loadingParks && locationStatus === "granted" && (
+                <span className="text-[10px]" style={{ color: "#22c55e" }}>📍 Parks near you</span>
+              )}
+              {!loadingParks && locationStatus === "denied" && (
+                <span className="text-[10px]" style={{ color: "var(--fg-muted)" }}>Location denied</span>
+              )}
+              {!loadingParks && locationStatus === "error" && (
+                <button type="button"
+                  onClick={() =>
+                    navigator.geolocation?.getCurrentPosition(
+                      p => fetchNearbyParks(p.coords.latitude, p.coords.longitude),
+                      () => setLocationStatus("denied"),
+                      { timeout: 10000, maximumAge: 0 }
+                    )
+                  }
+                  className="text-[10px] underline" style={{ color: "var(--primary)" }}>
+                  ⚠ Retry nearby parks
+                </button>
+              )}
+            </div>
+          </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {TRAILS.map(trail => (
+            {trails.map(trail => (
               <TrailCard key={trail.id} trail={trail} selected={trail.id === selectedTrail.id} onSelect={() => handleSelectTrail(trail)} />
             ))}
           </div>
@@ -218,7 +373,7 @@ export default function WalkPage() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: "Steps",    val: steps.toLocaleString() },
-            { label: "Distance", val: `${km} km`             },
+            { label: "Distance", val: `${miles} mi`             },
             { label: "Calories", val: `${cal} kcal`          },
           ].map(({ label, val }) => (
             <div key={label} className="pw-card text-center">
@@ -273,7 +428,7 @@ export default function WalkPage() {
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Steps",    val: steps.toLocaleString() },
-          { label: "Distance", val: `${km} km`             },
+          { label: "Distance", val: `${miles} mi`             },
           { label: "Calories", val: `${cal} kcal`          },
         ].map(({ label, val }) => (
           <div key={label} className="pw-card text-center">
