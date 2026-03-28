@@ -271,7 +271,7 @@ export default function PlacesPage() {
     setLoading(true);
     setError("");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
+    const timer = setTimeout(() => controller.abort(), 35000); // 35s > 3×10s server timeout
 
     fetch(`/api/places?lat=${location.lat}&lon=${location.lon}&category=${cat}`, { signal: controller.signal })
       .then(r => r.json())
@@ -352,8 +352,18 @@ export default function PlacesPage() {
 
       {/* Error */}
       {error && (
-        <div className="bg-white rounded-2xl shadow-sm p-5 border border-red-100 mb-6">
-          <p className="text-red-500 text-sm">⚠️ {error}</p>
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-red-100 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <div className="flex-1">
+            <p className="font-semibold text-gray-800 text-sm mb-0.5">Could not load places</p>
+            <p className="text-xs text-gray-400">The map data service is slow or unreachable. Try again — it usually works on the second attempt.</p>
+          </div>
+          <button
+            onClick={() => fetchPlaces(category)}
+            className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+            style={{ background: "linear-gradient(135deg, #6367FF, #8494FF)" }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
