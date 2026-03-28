@@ -270,6 +270,81 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Weather */}
+      <div className="rounded-2xl p-5 md:p-6"
+        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">🌤</span>
+          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Current Weather</p>
+        </div>
+
+        {weatherLoading && (
+          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
+            Fetching your local weather…
+          </div>
+        )}
+
+        {weatherError && !weatherLoading && (
+          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+            Could not load weather — {weatherError}
+          </p>
+        )}
+
+        {!weatherLoading && !weatherError && !weather && (
+          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+            Enable location access to see live weather conditions.
+          </p>
+        )}
+
+        {weather && !weatherLoading && (() => {
+          const main = weather.weather?.[0]?.main ?? "";
+          const desc = weather.weather?.[0]?.description ?? "";
+          const temp = Math.round(weather.main?.temp ?? 0);
+          const feels = Math.round(weather.main?.feels_like ?? 0);
+          const humidity = weather.main?.humidity ?? 0;
+          const wind = Math.round((weather.wind?.speed ?? 0) * 3.6); // m/s → km/h
+          const city = weather.name ?? "";
+          const good = isGoodWalkWeather(main, temp);
+
+          return (
+            <div className="space-y-4">
+              <div className="flex items-end gap-4">
+                <span className="text-5xl leading-none">{weatherEmoji(main)}</span>
+                <div>
+                  <p className="text-3xl font-bold">{temp}°C</p>
+                  <p className="text-sm capitalize" style={{ color: "var(--fg-muted)" }}>{desc}</p>
+                  {city && <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{city}</p>}
+                </div>
+                <div className="ml-auto shrink-0">
+                  <span className="rounded-full px-3 py-1 text-xs font-bold"
+                    style={{
+                      background: good ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
+                      color: good ? "#22c55e" : "#ef4444",
+                    }}>
+                    {good ? "Good walk weather" : "Stay inside"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Feels like", val: `${feels}°C` },
+                  { label: "Humidity",   val: `${humidity}%` },
+                  { label: "Wind",       val: `${wind} km/h` },
+                ].map(({ label, val }) => (
+                  <div key={label} className="rounded-xl px-3 py-2.5 text-center"
+                    style={{ background: "var(--primary-dim)" }}>
+                    <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{label}</p>
+                    <p className="text-sm font-bold mt-0.5">{val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* 2-column: Leaf + Content */}
       <div className="grid gap-5 md:grid-cols-2">
         {/* Leaf card */}
@@ -409,142 +484,6 @@ export default function DashboardPage() {
         <p className="text-sm leading-7 italic" style={{ color: "var(--fg)" }}>{aiBriefings[score!]}</p>
       </div>
 
-      {/* Weather */}
-      <div className="rounded-2xl p-5 md:p-6"
-        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">🌤</span>
-          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Current Weather</p>
-        </div>
-
-        {weatherLoading && (
-          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
-            Fetching your local weather…
-          </div>
-        )}
-
-        {weatherError && !weatherLoading && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            Could not load weather — {weatherError}
-          </p>
-        )}
-
-        {!weatherLoading && !weatherError && !weather && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            Enable location access to see live weather conditions.
-          </p>
-        )}
-
-        {weather && !weatherLoading && (() => {
-          const main = weather.weather?.[0]?.main ?? "";
-          const desc = weather.weather?.[0]?.description ?? "";
-          const temp = Math.round(weather.main?.temp ?? 0);
-          const feels = Math.round(weather.main?.feels_like ?? 0);
-          const humidity = weather.main?.humidity ?? 0;
-          const wind = Math.round((weather.wind?.speed ?? 0) * 3.6); // m/s → km/h
-          const city = weather.name ?? "";
-          const good = isGoodWalkWeather(main, temp);
-
-          return (
-            <div className="space-y-4">
-              <div className="flex items-end gap-4">
-                <span className="text-5xl leading-none">{weatherEmoji(main)}</span>
-                <div>
-                  <p className="text-3xl font-bold">{temp}°C</p>
-                  <p className="text-sm capitalize" style={{ color: "var(--fg-muted)" }}>{desc}</p>
-                  {city && <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{city}</p>}
-                </div>
-                <div className="ml-auto shrink-0">
-                  <span className="rounded-full px-3 py-1 text-xs font-bold"
-                    style={{
-                      background: good ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
-                      color: good ? "#22c55e" : "#ef4444",
-                    }}>
-                    {good ? "Good walk weather" : "Stay inside"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: "Feels like", val: `${feels}°C` },
-                  { label: "Humidity",   val: `${humidity}%` },
-                  { label: "Wind",       val: `${wind} km/h` },
-                ].map(({ label, val }) => (
-                  <div key={label} className="rounded-xl px-3 py-2.5 text-center"
-                    style={{ background: "var(--primary-dim)" }}>
-                    <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{label}</p>
-                    <p className="text-sm font-bold mt-0.5">{val}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Calendar Events */}
-      <div className="rounded-2xl p-5 md:p-6"
-        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">📅</span>
-          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Upcoming Events</p>
-        </div>
-
-        {calLoading && (
-          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
-            Loading your calendar…
-          </div>
-        )}
-
-        {calError && !calLoading && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            Could not load calendar — {calError}
-          </p>
-        )}
-
-        {!calLoading && !calError && calEvents.length === 0 && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            No upcoming events found. Enjoy the open time!
-          </p>
-        )}
-
-        {!calLoading && calEvents.length > 0 && (() => {
-          const groups = groupByDay(calEvents).slice(0, 3);
-          return (
-            <div className="space-y-5">
-              {groups.map(({ day, events }) => (
-                <div key={day}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest mb-2"
-                    style={{ color: "var(--accent1)" }}>{day}</p>
-                  <div className="space-y-2">
-                    {events.slice(0, 5).map((ev: any) => {
-                      const color = EVENT_COLORS[ev.colorId ?? ""] ?? "var(--primary)";
-                      const start = fmtEventTime(ev.start?.dateTime);
-                      const end   = fmtEventTime(ev.end?.dateTime);
-                      return (
-                        <div key={ev.id} className="flex items-start gap-3 rounded-xl px-3 py-2.5"
-                          style={{ background: "var(--primary-dim)" }}>
-                          <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">{ev.summary ?? "Untitled"}</p>
-                            <p className="text-[11px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
-                              {start === "All day" ? "All day" : `${start} – ${end}`}
-                              {ev.location && ` · ${ev.location}`}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
-      </div>
     </div>
   );
 }
