@@ -8,11 +8,11 @@ export default async function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 to-indigo-100">
       <div className="bg-white rounded-2xl shadow-xl p-10 flex flex-col items-center gap-8 max-w-md w-full mx-4">
         <div className="flex flex-col items-center gap-2">
           <span className="text-5xl">🌳</span>
-          <h1 className="text-3xl font-bold text-emerald-800">Perfect Walk</h1>
+          <h1 className="text-3xl font-bold text-indigo-800">Perfect Walk</h1>
           <p className="text-gray-500 text-center text-sm">
             Discover nearby parks and check the weather for your perfect walk.
           </p>
@@ -70,7 +70,7 @@ export default async function LoginPage() {
           }}
           className="w-full flex flex-col gap-3"
         >
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs text-indigo-700">
             <strong>Test credentials:</strong> test@example.com / password
           </div>
           <input
@@ -79,7 +79,7 @@ export default async function LoginPage() {
             defaultValue="test@example.com"
             placeholder="Email"
             required
-            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
           <input
             name="password"
@@ -87,11 +87,11 @@ export default async function LoginPage() {
             defaultValue="password"
             placeholder="Password"
             required
-            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
           />
           <button
             type="submit"
-            className="w-full bg-emerald-600 text-white font-medium py-3 px-6 rounded-xl hover:bg-emerald-700 transition-colors"
+            className="w-full bg-[#5B5FE8] text-white font-medium py-3 px-6 rounded-xl hover:bg-[#4348c4] transition-colors"
           >
             Sign in (Test)
           </button>

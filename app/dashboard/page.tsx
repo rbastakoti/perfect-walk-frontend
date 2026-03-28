@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import WeatherCard from "@/components/WeatherCard";
 import ParksCard from "@/components/ParksCard";
+import CalendarCard from "@/components/CalendarCard";
 
 interface LocationState {
   lat: number;
@@ -13,13 +14,15 @@ interface LocationState {
 }
 
 export default function DashboardPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const [location, setLocation] = useState<LocationState | null>(null);
+  const [placeName, setPlaceName] = useState<string | null>(null);
   const [weather, setWeather] = useState<any>(null);
   const [parks, setParks] = useState<any[]>([]);
-  const [loading, setLoading] = useState({ location: true, weather: false, parks: false });
-  const [errors, setErrors] = useState({ weather: "", parks: "" });
+  const [calendar, setCalendar] = useState<any[]>([]);
+  const [loading, setLoading] = useState({ location: true, weather: false, parks: false, calendar: false });
+  const [errors, setErrors] = useState({ weather: "", parks: "", calendar: "" });
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -39,6 +42,15 @@ export default function DashboardPage() {
         const { latitude: lat, longitude: lon } = pos.coords;
         setLocation({ lat, lon });
         setLoading((l) => ({ ...l, location: false }));
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+          .then((r) => r.json())
+          .then((d) => {
+            const a = d.address ?? {};
+            const name = [a.suburb ?? a.neighbourhood ?? a.city_district, a.city ?? a.town ?? a.village]
+              .filter(Boolean).join(", ");
+            setPlaceName(name || d.display_name?.split(",")[0] || null);
+          })
+          .catch(() => {});
       },
       (err) => {
         setLocation({ lat: 0, lon: 0, error: err.message });
@@ -47,6 +59,19 @@ export default function DashboardPage() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    setLoading((l) => ({ ...l, calendar: true }));
+    fetch("/api/calendar")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setCalendar(data.events ?? []);
+      })
+      .catch((e) => setErrors((err) => ({ ...err, calendar: e.message })))
+      .finally(() => setLoading((l) => ({ ...l, calendar: false })));
+  }, [status]);
 
   useEffect(() => {
     if (!location || location.error || !location.lat) return;
@@ -78,10 +103,10 @@ export default function DashboardPage() {
 
   if (status === "loading" || loading.location) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100">
+      <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <div className="text-5xl mb-4 animate-bounce">🌳</div>
-          <p className="text-emerald-700 font-medium">
+          <p className="text-indigo-600 font-medium">
             {loading.location ? "Accessing your location..." : "Loading..."}
           </p>
         </div>
@@ -91,7 +116,7 @@ export default function DashboardPage() {
 
   if (location?.error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100">
+      <div className="h-full flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md mx-4 text-center">
           <span className="text-5xl block mb-4">📍</span>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Location Access Required</h2>
@@ -101,7 +126,7 @@ export default function DashboardPage() {
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 bg-emerald-600 text-white px-6 py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+            className="mt-4 bg-[#5B5FE8] text-white px-6 py-2 rounded-lg hover:bg-[#4348c4] transition-colors"
           >
             Try Again
           </button>
@@ -111,43 +136,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🌳</span>
-            <h1 className="text-xl font-bold text-emerald-800">Perfect Walk</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {session?.user?.image && (
-              <img
-                src={session.user.image}
-                alt={session.user.name || "User"}
-                className="w-8 h-8 rounded-full border-2 border-emerald-200"
-              />
-            )}
-            <span className="text-sm text-gray-600 hidden sm:block">
-              {session?.user?.name}
-            </span>
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="text-sm text-gray-500 hover:text-red-500 transition-colors px-3 py-1 rounded-lg hover:bg-red-50"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <div>
       {/* Main content */}
       <main className="max-w-4xl mx-auto px-4 py-8">
         {location?.lat !== 0 && (
-          <p className="text-sm text-emerald-700 mb-6 flex items-center gap-1.5">
+          <p className="text-sm text-indigo-600 mb-6 flex items-center gap-1.5">
             <span>📍</span>
-            <span>
-              {location?.lat.toFixed(4)}, {location?.lon.toFixed(4)}
-            </span>
+            <span>{placeName ?? "Locating…"}</span>
           </p>
         )}
 
@@ -155,12 +150,12 @@ export default function DashboardPage() {
           {/* Weather section */}
           <section>
             {loading.weather ? (
-              <div className="bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-lg p-6 text-white animate-pulse">
-                <div className="h-6 bg-blue-400 rounded w-40 mb-3" />
-                <div className="h-16 bg-blue-400 rounded w-32 mb-3" />
+              <div className="bg-gradient-to-br from-[#5B5FE8] to-[#4348c4] rounded-2xl shadow-lg p-6 text-white animate-pulse">
+                <div className="h-6 bg-white/20 rounded w-40 mb-3" />
+                <div className="h-16 bg-white/20 rounded w-32 mb-3" />
                 <div className="grid grid-cols-3 gap-3">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="bg-blue-600/50 rounded-xl p-3 h-16" />
+                    <div key={i} className="bg-white/10 rounded-xl p-3 h-16" />
                   ))}
                 </div>
               </div>
@@ -174,6 +169,15 @@ export default function DashboardPage() {
             ) : weather ? (
               <WeatherCard data={weather} />
             ) : null}
+          </section>
+
+          {/* Calendar section */}
+          <section>
+            <CalendarCard
+              events={calendar}
+              loading={loading.calendar}
+              error={errors.calendar}
+            />
           </section>
 
           {/* Parks section */}

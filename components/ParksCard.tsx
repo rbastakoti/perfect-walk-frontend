@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 interface Park {
   id: number;
   type: string;
@@ -5,6 +7,9 @@ interface Park {
   lat?: number;
   lon?: number;
   center?: { lat: number; lon: number };
+  distance?: number;
+  googleDescription?: string | null;
+  photoRef?: string | null;
 }
 
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -39,7 +44,7 @@ export default function ParksCard({
       const lat = park.lat ?? park.center?.lat;
       const lon = park.lon ?? park.center?.lon;
       const distance =
-        lat && lon ? getDistance(userLat, userLon, lat, lon) : Infinity;
+        park.distance ?? (lat && lon ? getDistance(userLat, userLon, lat, lon) : Infinity);
       return { ...park, lat, lon, distance };
     })
     .filter((p) => p.lat && p.lon)
@@ -63,28 +68,52 @@ export default function ParksCard({
         <div className="space-y-3">
           {parksWithDistance.map((park) => {
             const name = park.tags?.name || park.tags?.["name:en"] || "Unnamed Park";
+            const description =
+              park.googleDescription || park.tags?.description || null;
             const osmUrl = `https://www.openstreetmap.org/${park.type}/${park.id}`;
+            const photoUrl = park.photoRef
+              ? `/api/parks/photo?ref=${encodeURIComponent(park.photoRef)}`
+              : null;
+
             return (
               <a
                 key={park.id}
                 href={osmUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 rounded-xl hover:bg-emerald-50 border border-gray-100 hover:border-emerald-200 transition-all group"
+                className="flex items-center gap-3 p-3 rounded-xl hover:bg-indigo-50 border border-gray-100 hover:border-indigo-200 transition-all group"
               >
-                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-xl flex-shrink-0">
-                  🌿
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800 truncate group-hover:text-emerald-700">
-                    {name}
-                  </p>
-                  {park.tags?.description && (
-                    <p className="text-xs text-gray-400 truncate">{park.tags.description}</p>
+                {/* Photo or fallback icon */}
+                <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-indigo-100 flex items-center justify-center">
+                  {photoUrl ? (
+                    <Image
+                      src={photoUrl}
+                      alt={name}
+                      width={56}
+                      height={56}
+                      className="object-cover w-full h-full"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="text-2xl">🌿</span>
                   )}
                 </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-800 truncate group-hover:text-indigo-700">
+                    {name}
+                  </p>
+                  {description && (
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-relaxed">
+                      {description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Distance */}
                 <div className="text-right flex-shrink-0">
-                  <span className="text-sm font-semibold text-emerald-600">
+                  <span className="text-sm font-semibold text-[#5B5FE8]">
                     {formatDistance(park.distance)}
                   </span>
                   <p className="text-xs text-gray-400">away</p>
