@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { aiBriefings, breathingMessages, quotes } from "@/lib/mock-data";
 import { BurnoutScore, WalkPhase } from "@/lib/types";
 import { AppCache } from "@/lib/app-cache";
+import { makeClientBackendCall } from "@/lib/backend-api";
 
 interface Trail {
   id: string; name: string; distance: string; duration: number;
@@ -160,6 +162,7 @@ function Ring({ remaining, total }: { remaining: number; total: number }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function WalkPage() {
   const router = useRouter();
+  const { data: session } = useSession();
 
   const [trails, setTrails]           = useState<Trail[]>(FALLBACK_TRAILS);
   const [loadingParks, setLoadingParks] = useState(true);
@@ -253,6 +256,53 @@ export default function WalkPage() {
   const handleSelectTrail = (trail: Trail) => {
     setSelected(trail);
     setRemaining(trail.duration * 60);
+  };
+
+  // Capture complete walking session data including user info
+  const captureWalkingSession = () => {
+    const elapsed = totalSeconds - remaining;
+    const steps = Math.round(elapsed * 1.4);
+    const miles = (steps * 0.000435).toFixed(2);
+    const cal = Math.round(elapsed * 0.08);
+
+    const sessionData = {
+      // User identification for partitioning
+      userId: session?.user?.id || null,
+
+      // Session identification & timing
+      sessionId: crypto.randomUUID(),
+      startTime: new Date(Date.now() - elapsed * 1000),
+      endTime: new Date(),
+      plannedDuration: selectedTrail.duration,
+      actualDuration: Math.round(elapsed / 60),
+      completed: remaining === 0,
+
+      // Trail/Location information
+      trailId: selectedTrail.id,
+      trailName: selectedTrail.name,
+      trailType: trails === FALLBACK_TRAILS ? "fallback" : "real_park",
+      distance: selectedTrail.distance,
+      difficulty: selectedTrail.difficulty,
+      locationUsed: locationStatus === "granted",
+      
+      // Activity metrics
+      estimatedSteps: steps,
+      estimatedDistance: parseFloat(miles),
+      estimatedCalories: cal,
+
+      // Wellness/mood tracking
+      moodBefore: beforeMood,
+      moodAfter: afterMood,
+      moodImprovement: afterMood && beforeMood ? afterMood - beforeMood : 0,
+      burnoutScoreAtTime: burnoutScore,
+
+      // Session metadata
+      quoteSeen: quoteRef.current,
+      completionMethod: remaining === 0 ? "timer_finished" : "manual_done",
+      timestamp: new Date().toISOString(),
+    };
+
+    return sessionData;
   };
 
   const burnoutScore = useMemo<BurnoutScore>(() => {
@@ -421,7 +471,7 @@ export default function WalkPage() {
         <p className="text-4xl mb-2">🎉</p>
         <h1 className="text-2xl font-bold">Walk Complete!</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--fg-muted)" }}>
-          {selectedTrail.name} · {Math.round((totalSeconds - remaining) / 60)} min · {km} km
+          {selectedTrail.name} · {Math.round((totalSeconds - remaining) / 60)} min · {miles} mi
         </p>
       </div>
 
@@ -452,9 +502,44 @@ export default function WalkPage() {
 
       <div className="flex gap-3">
         <button type="button" disabled={!afterMood}
-          onClick={() => { setSaved(true); setTimeout(() => router.push("/dashboard"), 1200); }}
+          onClick={async () => {
+            if (!session?.user) {
+              console.warn('No user session found');
+              setSaved(true);
+              setTimeout(() => router.push("/dashboard"), 1200);
+              return;
+            }
+
+            const walkData = captureWalkingSession();
+            
+            try {
+              setSaved(true); // Show saving state immediately
+              
+              // Send to FastAPI backend
+              const result = await makeClientBackendCall(
+                '/api/walking-sessions/add',
+                session,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(walkData)
+                }
+              );
+
+              if (!result.success) {
+                throw new Error(result.error || 'Failed to save walking session');
+              }
+
+              console.log('Walk session saved successfully:', walkData);
+              setTimeout(() => router.push("/dashboard"), 1200);
+            } catch (error) {
+              console.error('Failed to save walk session:', error);
+              // TODO: Show error message to user, but still navigate
+              setTimeout(() => router.push("/dashboard"), 1200);
+            }
+          }}
           className="flex-1 btn-primary py-3.5 text-sm text-center disabled:opacity-40">
-          {saved ? "Saved ✓" : "Save & Finish"}
+          {saved ? "Saving... ✓" : "Save & Finish"}
         </button>
         <button type="button" onClick={() => { setPhase("trail"); setRemaining(selectedTrail.duration * 60); setRunning(false); setBeforeMood(null); setAfterMood(null); }}
           className="rounded-2xl px-5 py-3.5 text-sm font-semibold transition hover:opacity-80"

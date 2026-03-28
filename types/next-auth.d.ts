@@ -5,6 +5,10 @@ declare module "next-auth" {
     accessToken?: string;
     error?: string;
   }
+
+  interface User {
+    id: string;
+  }
 }
 
 declare module "next-auth/jwt" {
