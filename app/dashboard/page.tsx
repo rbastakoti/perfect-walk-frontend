@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { aiBriefings } from "@/lib/mock-data";
 import { BurnoutScore } from "@/lib/types";
-import { todayEvents, bestWalkSlot, formatTime, detectGaps, DAY_START, DAY_END } from "@/lib/calendar";
+import { CalEvent, bestWalkSlot, formatTime, detectGaps, DAY_START, DAY_END, fromGoogleEvent, getWalkSlots } from "@/lib/calendar";
+import { AppCache } from "@/lib/app-cache";
 
 /* ─── Weather helpers ────────────────────────────────── */
 function weatherEmoji(main: string) {
@@ -21,12 +22,6 @@ function isGoodWalkWeather(main: string, temp: number) {
 }
 
 /* ─── Calendar helpers ───────────────────────────────── */
-const EVENT_COLORS: Record<string, string> = {
-  "1": "#7986CB", "2": "#33B679", "3": "#8E24AA", "4": "#E67C73",
-  "5": "#F6BF26", "6": "#F4511E", "7": "#039BE5", "8": "#616161",
-  "9": "#3F51B5", "10": "#0B8043", "11": "#D50000",
-};
-
 function fmtEventTime(dt?: string) {
   if (!dt) return "All day";
   return new Date(dt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
@@ -99,33 +94,6 @@ function BurnoutLeaf({ score }: { score: BurnoutScore }) {
   );
 }
 
-function MiniMap() {
-  return (
-    <div className="relative h-36 w-full overflow-hidden rounded-xl" style={{ background: "#0d1022" }}>
-      <svg viewBox="0 0 360 144" className="absolute inset-0 h-full w-full">
-        {[24, 56, 88, 120].map((y) => (
-          <line key={y} x1="0" y1={y} x2="360" y2={y} stroke="#1e2a4a" strokeWidth="0.8" />
-        ))}
-        {[50, 120, 190, 260, 330].map((x) => (
-          <line key={x} x1={x} y1="0" x2={x} y2="144" stroke="#1e2a4a" strokeWidth="0.8" />
-        ))}
-        <rect x="100" y="20" width="140" height="96" rx="12" fill="#0e2218" opacity="0.9" />
-        <path d="M185 118 Q185 34 180 34 Q130 34 112 66 Q94 98 116 118 Q148 134 185 118"
-          fill="none" stroke="#6367FF" strokeWidth="2.5" strokeDasharray="7 3.5" />
-        <circle cx="185" cy="118" r="5.5" fill="#6367FF" />
-        <circle cx="185" cy="118" r="10" fill="none" stroke="#6367FF" strokeWidth="1.5" opacity="0.4" />
-      </svg>
-      <span className="absolute bottom-2 left-3 text-xs font-semibold" style={{ color: "#8494FF" }}>
-        Riverside Loop Park
-      </span>
-      <span className="absolute top-2 right-3 rounded-full px-2 py-0.5 text-[10px] font-bold"
-        style={{ background: "rgba(99,103,255,0.2)", color: "#C9BEFF" }}>
-        1.2 km loop
-      </span>
-    </div>
-  );
-}
-
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -140,51 +108,79 @@ export default function DashboardPage() {
   const [score, setScore] = useState<BurnoutScore | null>(null);
   const [fading, setFading] = useState(false);
 
-  // Weather
-  const [weather, setWeather] = useState<any>(null);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherError, setWeatherError] = useState("");
+  // Weather — read from cache first
+  const [weather, setWeather]           = useState<any>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
 
-  // Calendar
-  const [calEvents, setCalEvents] = useState<any[]>([]);
-  const [calLoading, setCalLoading] = useState(false);
-  const [calError, setCalError] = useState("");
+  // Calendar — read from cache first, converted to CalEvent[]
+  const [calEvents, setCalEvents]       = useState<CalEvent[]>([]);
+  const [calLoading, setCalLoading]     = useState(true);
 
   useEffect(() => {
-    const today = new Date().toDateString();
-    const savedDate = localStorage.getItem("pw-checkin-date");
+    // Restore today's check-in if already done
+    const today      = new Date().toDateString();
+    const savedDate  = localStorage.getItem("pw-checkin-date");
     const savedScore = Number(localStorage.getItem("pw-checkin-score")) as BurnoutScore;
     if (savedDate === today && savedScore >= 1 && savedScore <= 5) {
       setScore(savedScore);
       setView("dashboard");
     }
-  }, []);
 
-  // Fetch weather via geolocation
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    setWeatherLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      ({ coords: { latitude: lat, longitude: lon } }) => {
+    // ── Load weather from cache (instant) ──────────────────────────────────
+    const cachedWeather = AppCache.get<any>("weather");
+    if (cachedWeather) {
+      setWeather(cachedWeather);
+      setWeatherLoading(false);
+    } else {
+      // Fallback: fetch fresh (happens if user skipped /init or cache expired)
+      const loc = AppCache.get<{ lat: number; lon: number }>("location");
+      const doFetch = (lat: number, lon: number) =>
         fetch(`/api/weather?lat=${lat}&lon=${lon}`)
           .then(r => r.json())
-          .then(data => { if (data.error) throw new Error(data.error); setWeather(data); })
-          .catch(e => setWeatherError(e.message))
+          .then(d => { AppCache.set("weather", d); setWeather(d); })
+          .catch(() => {})
           .finally(() => setWeatherLoading(false));
-      },
-      () => setWeatherLoading(false),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+
+      if (loc) {
+        doFetch(loc.lat, loc.lon);
+      } else {
+        navigator.geolocation?.getCurrentPosition(
+          p => doFetch(p.coords.latitude, p.coords.longitude),
+          () => setWeatherLoading(false),
+          { timeout: 8000 }
+        );
+      }
+    }
+
+    // ── Load calendar from cache (instant) ─────────────────────────────────
+    const cachedCal = AppCache.get<{ events: any[] }>("calendar");
+    if (cachedCal) {
+      const mapped = (cachedCal.events ?? [])
+        .map((ev, i) => fromGoogleEvent(ev, i))
+        .filter((e): e is CalEvent => e !== null);
+      setCalEvents(mapped);
+      setCalLoading(false);
+    }
+    // else: fetch triggered by status effect below
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch calendar
+  // Fallback calendar fetch when cache is empty
   useEffect(() => {
     if (status !== "authenticated") return;
-    setCalLoading(true);
+    if (AppCache.get("calendar")) { setCalLoading(false); return; }
     fetch("/api/calendar")
       .then(r => r.json())
-      .then(data => { if (data.error) throw new Error(data.error); setCalEvents(data.events ?? []); })
-      .catch(e => setCalError(e.message))
+      .then(data => {
+        if (!data.error) {
+          AppCache.set("calendar", data);
+          const mapped = (data.events ?? [])
+            .map((ev: any, i: number) => fromGoogleEvent(ev, i))
+            .filter((e: CalEvent | null): e is CalEvent => e !== null);
+          setCalEvents(mapped);
+        }
+      })
+      .catch(() => {})
       .finally(() => setCalLoading(false));
   }, [status]);
 
@@ -205,6 +201,10 @@ export default function DashboardPage() {
   }, [score, router]);
 
   const showWalkRec = useMemo(() => score !== null && score <= 3, [score]);
+
+  // Walk slot from real calendar events
+  const walkSlot    = useMemo(() => calLoading ? null : bestWalkSlot(calEvents), [calEvents, calLoading]);
+  const walkSlots   = useMemo(() => calLoading ? [] : getWalkSlots(calEvents), [calEvents, calLoading]);
 
   if (fading) {
     return (
@@ -251,6 +251,26 @@ export default function DashboardPage() {
   /* ─── DASHBOARD VIEW ─── */
   const meta = LEAF_META[score!];
 
+  // Calendar signals from real events
+  const totalDayMins  = DAY_END - DAY_START;
+  const busyMins      = calEvents.reduce((s, e) => s + (e.end - e.start), 0);
+  const densityPct    = Math.round((busyMins / totalDayMins) * 100);
+  const densityLabel  = densityPct >= 60 ? "Heavy" : densityPct >= 35 ? "Moderate" : "Light";
+  const densityWarn   = densityPct >= 60;
+  const afterHours    = calEvents.filter(e => e.start >= 18 * 60);
+  const hasAfterHours = afterHours.length > 0;
+  const gaps          = detectGaps(calEvents);
+  const freeMin       = gaps.reduce((s, g) => s + (g.end - g.start), 0);
+  const freeLabel     = freeMin >= 60
+    ? `${Math.floor(freeMin / 60)}h ${freeMin % 60 > 0 ? `${freeMin % 60}m` : ""}`.trim()
+    : `${freeMin} min`;
+
+  // Best park from cached parks (for the walk card)
+  const cachedParks = AppCache.get<{ elements: any[] }>("parks");
+  const bestPark    = cachedParks?.elements?.[0];
+  const bestParkName = bestPark?.tags?.name || bestPark?.tags?.["name:en"] || "Nearby Park";
+  const bestParkDist = bestPark ? `${((bestPark.distance as number) / 1609.34).toFixed(1)} mi away` : null;
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       {/* Welcome banner */}
@@ -261,13 +281,76 @@ export default function DashboardPage() {
           </p>
           <h1 className="mt-0.5 text-xl font-bold">Your burnout status for today</h1>
           <p className="mt-0.5 text-sm" style={{ color: "var(--fg-muted)" }}>
-            Based on your check-in + calendar signals
+            Based on your check-in + {calLoading ? "loading calendar…" : `${calEvents.length} events today`}
           </p>
         </div>
         <button type="button" onClick={() => { setView("checkin"); setScore(null); }}
           className="btn-secondary text-xs shrink-0">
           Re-check
         </button>
+      </div>
+
+      {/* Weather */}
+      <div className="rounded-2xl p-5 md:p-6"
+        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-lg">🌤</span>
+          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Current Weather</p>
+        </div>
+
+        {weatherLoading && (
+          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
+            Fetching your local weather…
+          </div>
+        )}
+
+        {!weatherLoading && !weather && (
+          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+            Enable location access to see live weather conditions.
+          </p>
+        )}
+
+        {weather && !weatherLoading && (() => {
+          const main    = weather.weather?.[0]?.main ?? "";
+          const desc    = weather.weather?.[0]?.description ?? "";
+          const temp    = Math.round(weather.main?.temp ?? 0);
+          const feels   = Math.round(weather.main?.feels_like ?? 0);
+          const humidity = weather.main?.humidity ?? 0;
+          const wind    = Math.round((weather.wind?.speed ?? 0) * 2.237);
+          const city    = weather.name ?? "";
+          const good    = isGoodWalkWeather(main, temp);
+          return (
+            <div className="space-y-4">
+              <div className="flex items-end gap-4">
+                <span className="text-5xl leading-none">{weatherEmoji(main)}</span>
+                <div>
+                  <p className="text-3xl font-bold">{temp}°C</p>
+                  <p className="text-sm capitalize" style={{ color: "var(--fg-muted)" }}>{desc}</p>
+                  {city && <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{city}</p>}
+                </div>
+                <div className="ml-auto shrink-0">
+                  <span className="rounded-full px-3 py-1 text-xs font-bold"
+                    style={{ background: good ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)", color: good ? "#22c55e" : "#ef4444" }}>
+                    {good ? "Good walk weather" : "Stay inside"}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Feels like", val: `${feels}°C`    },
+                  { label: "Humidity",   val: `${humidity}%`   },
+                  { label: "Wind",       val: `${wind} mph`    },
+                ].map(({ label, val }) => (
+                  <div key={label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: "var(--primary-dim)" }}>
+                    <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{label}</p>
+                    <p className="text-sm font-bold mt-0.5">{val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 2-column: Leaf + Content */}
@@ -297,84 +380,77 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {(() => {
-            const totalDayMins  = DAY_END - DAY_START;
-            const busyMins      = todayEvents.reduce((s, e) => s + (e.end - e.start), 0);
-            const densityPct    = Math.round((busyMins / totalDayMins) * 100);
-            const densityLabel  = densityPct >= 60 ? "Heavy" : densityPct >= 35 ? "Moderate" : "Light";
-            const densityWarn   = densityPct >= 60;
-            const afterHours    = todayEvents.filter(e => e.start >= 18 * 60);
-            const hasAfterHours = afterHours.length > 0;
-            const gaps          = detectGaps(todayEvents);
-            const freeMin       = gaps.reduce((s, g) => s + (g.end - g.start), 0);
-            const freeLabel     = freeMin >= 60
-              ? `${Math.floor(freeMin / 60)}h ${freeMin % 60 > 0 ? `${freeMin % 60}m` : ""}`.trim()
-              : `${freeMin} min`;
-
-            const signals = [
-              { label: "Meetings today",     val: `${todayEvents.length}`,                                                          sub: `${busyMins} min blocked`,     warn: todayEvents.length >= 5 },
-              { label: "Calendar density",   val: densityLabel,                                                                     sub: `${densityPct}% of day`,       warn: densityWarn             },
-              { label: "Free time left",     val: freeLabel,                                                                        sub: `${gaps.length} gaps found`,   warn: freeMin < 30            },
-              { label: "After-hours events", val: hasAfterHours ? `${afterHours.length} event${afterHours.length > 1 ? "s" : ""}` : "None", sub: hasAfterHours ? formatTime(afterHours[0].start) : "Clear evening", warn: hasAfterHours },
-            ];
-
-            return (
-              <div className="mt-4 w-full space-y-1.5 text-left">
-                {signals.map(({ label, val, sub, warn }) => (
-                  <div key={label} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs"
-                    style={{ background: "var(--primary-dim)" }}>
-                    <div>
-                      <span style={{ color: "var(--fg-muted)" }}>{label}</span>
-                      <span className="ml-1.5 text-[10px]" style={{ color: "var(--fg-muted)", opacity: 0.6 }}>{sub}</span>
-                    </div>
-                    <span className="rounded-full px-2 py-0.5 font-semibold shrink-0"
-                      style={{
-                        background: warn ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
-                        color:      warn ? "#ef4444" : "#22c55e",
-                      }}>
-                      {val}
-                    </span>
+          {/* Calendar signals — live from real events */}
+          {calLoading ? (
+            <div className="mt-4 w-full space-y-1.5">
+              {[70, 85, 60, 75].map((w, i) => (
+                <div key={i} className="h-8 rounded-lg animate-pulse" style={{ width: `${w}%`, background: "var(--primary-dim)" }} />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 w-full space-y-1.5 text-left">
+              {[
+                { label: "Meetings today",     val: `${calEvents.length}`,                                                              sub: `${busyMins} min blocked`,     warn: calEvents.length >= 5    },
+                { label: "Calendar density",   val: densityLabel,                                                                       sub: `${densityPct}% of day`,       warn: densityWarn              },
+                { label: "Free time left",     val: freeLabel,                                                                          sub: `${gaps.length} gaps found`,   warn: freeMin < 30             },
+                { label: "After-hours events", val: hasAfterHours ? `${afterHours.length} event${afterHours.length > 1 ? "s" : ""}` : "None",
+                  sub: hasAfterHours ? formatTime(afterHours[0].start) : "Clear evening", warn: hasAfterHours },
+              ].map(({ label, val, sub, warn }) => (
+                <div key={label} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs"
+                  style={{ background: "var(--primary-dim)" }}>
+                  <div>
+                    <span style={{ color: "var(--fg-muted)" }}>{label}</span>
+                    <span className="ml-1.5 text-[10px]" style={{ color: "var(--fg-muted)", opacity: 0.6 }}>{sub}</span>
                   </div>
-                ))}
-              </div>
-            );
-          })()}
+                  <span className="rounded-full px-2 py-0.5 font-semibold shrink-0"
+                    style={{ background: warn ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", color: warn ? "#ef4444" : "#22c55e" }}>
+                    {val}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Right column */}
         <div className="space-y-4">
-          {(() => {
-            const slot = bestWalkSlot(todayEvents);
-            return slot ? (
-              <button type="button" onClick={() => router.push("/calendar")}
-                className="w-full text-left rounded-2xl p-5 transition-all hover:scale-[1.01] active:scale-[0.99]"
-                style={{ background: "linear-gradient(135deg, #6367FF 0%, #8494FF 55%, #C9BEFF 100%)", boxShadow: "0 4px 20px rgba(99,103,255,0.25)" }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-1">Walk Window Detected</p>
-                <p className="text-xl font-bold text-white">{formatTime(slot.start)} – {formatTime(slot.end)}</p>
-                <p className="mt-1 text-sm text-white/70">{slot.end - slot.start} min free · Tap to see your schedule →</p>
-              </button>
-            ) : (
-              <div className="rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-                <p className="text-sm font-semibold">No gaps found today</p>
-                <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>Your schedule is packed — try a 5-min breathing walk.</p>
-              </div>
-            );
-          })()}
+          {/* Walk window from real calendar */}
+          {calLoading ? (
+            <div className="h-24 rounded-2xl animate-pulse" style={{ background: "var(--primary-dim)" }} />
+          ) : walkSlot ? (
+            <button type="button" onClick={() => router.push("/calendar")}
+              className="w-full text-left rounded-2xl p-5 transition-all hover:scale-[1.01] active:scale-[0.99]"
+              style={{ background: "linear-gradient(135deg, #6367FF 0%, #8494FF 55%, #C9BEFF 100%)", boxShadow: "0 4px 20px rgba(99,103,255,0.25)" }}>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-1">Walk Window Detected</p>
+              <p className="text-xl font-bold text-white">{formatTime(walkSlot.start)} – {formatTime(walkSlot.end)}</p>
+              <p className="mt-1 text-sm text-white/70">
+                {walkSlots.length} window{walkSlots.length !== 1 ? "s" : ""} found · Tap to see your schedule →
+              </p>
+            </button>
+          ) : (
+            <div className="rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <p className="text-sm font-semibold">No gaps found today</p>
+              <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>Your schedule is packed — try a 5-min breathing walk.</p>
+            </div>
+          )}
 
           {showWalkRec && (
             <div className="rounded-2xl p-5 space-y-4 animate-slide-up"
               style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "var(--accent1)" }}>Perfect Walk Found</p>
-                <h2 className="text-lg font-bold">Riverside Loop Park</h2>
+                <h2 className="text-lg font-bold">{bestParkName}</h2>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {["🚶 8 min walk", "🔄 18-min loop", "☀️ 72°F, breeze"].map((b) => (
+                  {[
+                    bestParkDist ? `📍 ${bestParkDist}` : "🚶 Nearby",
+                    walkSlot ? `⏱ ${walkSlot.end - walkSlot.start} min window` : "🔄 Loop trail",
+                    weather ? `${weatherEmoji(weather.weather?.[0]?.main ?? "")} ${Math.round(weather.main?.temp ?? 0)}°C` : "☀️ Check weather",
+                  ].map((b) => (
                     <span key={b} className="rounded-full px-2.5 py-1 text-xs font-semibold"
                       style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>{b}</span>
                   ))}
                 </div>
               </div>
-              <MiniMap />
               <button type="button" onClick={handleGoNow}
                 className="btn-primary w-full py-3 text-center text-sm"
                 style={{ background: "var(--primary)" }}>
@@ -407,143 +483,6 @@ export default function DashboardPage() {
           <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>AI Walk Briefing</p>
         </div>
         <p className="text-sm leading-7 italic" style={{ color: "var(--fg)" }}>{aiBriefings[score!]}</p>
-      </div>
-
-      {/* Weather */}
-      <div className="rounded-2xl p-5 md:p-6"
-        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">🌤</span>
-          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Current Weather</p>
-        </div>
-
-        {weatherLoading && (
-          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
-            Fetching your local weather…
-          </div>
-        )}
-
-        {weatherError && !weatherLoading && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            Could not load weather — {weatherError}
-          </p>
-        )}
-
-        {!weatherLoading && !weatherError && !weather && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            Enable location access to see live weather conditions.
-          </p>
-        )}
-
-        {weather && !weatherLoading && (() => {
-          const main = weather.weather?.[0]?.main ?? "";
-          const desc = weather.weather?.[0]?.description ?? "";
-          const temp = Math.round(weather.main?.temp ?? 0);
-          const feels = Math.round(weather.main?.feels_like ?? 0);
-          const humidity = weather.main?.humidity ?? 0;
-          const wind = Math.round((weather.wind?.speed ?? 0) * 3.6); // m/s → km/h
-          const city = weather.name ?? "";
-          const good = isGoodWalkWeather(main, temp);
-
-          return (
-            <div className="space-y-4">
-              <div className="flex items-end gap-4">
-                <span className="text-5xl leading-none">{weatherEmoji(main)}</span>
-                <div>
-                  <p className="text-3xl font-bold">{temp}°C</p>
-                  <p className="text-sm capitalize" style={{ color: "var(--fg-muted)" }}>{desc}</p>
-                  {city && <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{city}</p>}
-                </div>
-                <div className="ml-auto shrink-0">
-                  <span className="rounded-full px-3 py-1 text-xs font-bold"
-                    style={{
-                      background: good ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)",
-                      color: good ? "#22c55e" : "#ef4444",
-                    }}>
-                    {good ? "Good walk weather" : "Stay inside"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: "Feels like", val: `${feels}°C` },
-                  { label: "Humidity",   val: `${humidity}%` },
-                  { label: "Wind",       val: `${wind} km/h` },
-                ].map(({ label, val }) => (
-                  <div key={label} className="rounded-xl px-3 py-2.5 text-center"
-                    style={{ background: "var(--primary-dim)" }}>
-                    <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{label}</p>
-                    <p className="text-sm font-bold mt-0.5">{val}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Calendar Events */}
-      <div className="rounded-2xl p-5 md:p-6"
-        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">📅</span>
-          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Upcoming Events</p>
-        </div>
-
-        {calLoading && (
-          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
-            Loading your calendar…
-          </div>
-        )}
-
-        {calError && !calLoading && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            Could not load calendar — {calError}
-          </p>
-        )}
-
-        {!calLoading && !calError && calEvents.length === 0 && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-            No upcoming events found. Enjoy the open time!
-          </p>
-        )}
-
-        {!calLoading && calEvents.length > 0 && (() => {
-          const groups = groupByDay(calEvents).slice(0, 3);
-          return (
-            <div className="space-y-5">
-              {groups.map(({ day, events }) => (
-                <div key={day}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest mb-2"
-                    style={{ color: "var(--accent1)" }}>{day}</p>
-                  <div className="space-y-2">
-                    {events.slice(0, 5).map((ev: any) => {
-                      const color = EVENT_COLORS[ev.colorId ?? ""] ?? "var(--primary)";
-                      const start = fmtEventTime(ev.start?.dateTime);
-                      const end   = fmtEventTime(ev.end?.dateTime);
-                      return (
-                        <div key={ev.id} className="flex items-start gap-3 rounded-xl px-3 py-2.5"
-                          style={{ background: "var(--primary-dim)" }}>
-                          <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">{ev.summary ?? "Untitled"}</p>
-                            <p className="text-[11px] mt-0.5" style={{ color: "var(--fg-muted)" }}>
-                              {start === "All day" ? "All day" : `${start} – ${end}`}
-                              {ev.location && ` · ${ev.location}`}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
       </div>
     </div>
   );

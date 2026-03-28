@@ -12,16 +12,19 @@ export async function GET() {
     return NextResponse.json({ error: "no_token" }, { status: 403 });
   }
 
-  const now = new Date().toISOString();
-  const weekLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  // Fetch all of today's events (midnight → midnight) so past events are included
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
 
   const url =
     `https://www.googleapis.com/calendar/v3/calendars/primary/events` +
-    `?timeMin=${encodeURIComponent(now)}` +
-    `&timeMax=${encodeURIComponent(weekLater)}` +
+    `?timeMin=${encodeURIComponent(todayStart.toISOString())}` +
+    `&timeMax=${encodeURIComponent(todayEnd.toISOString())}` +
     `&singleEvents=true` +
     `&orderBy=startTime` +
-    `&maxResults=15`;
+    `&maxResults=50`;
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },

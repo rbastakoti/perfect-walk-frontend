@@ -26,8 +26,9 @@ function getDistance(lat1: number, lon1: number, lat2: number, lon2: number): nu
 }
 
 function formatDistance(meters: number): string {
-  if (meters < 1000) return `${Math.round(meters)}m`;
-  return `${(meters / 1000).toFixed(1)}km`;
+  const miles = meters / 1609.34;
+  if (miles < 0.1) return `${Math.round(meters * 3.281)} ft`;
+  return `${miles.toFixed(1)} mi`;
 }
 
 export default function ParksCard({
@@ -62,7 +63,7 @@ export default function ParksCard({
       {parksWithDistance.length === 0 ? (
         <div className="text-center py-8 text-gray-400">
           <span className="text-4xl block mb-2">🔍</span>
-          <p>No parks found within 5km</p>
+          <p>No parks found within 3 mi</p>
         </div>
       ) : (
         <div className="space-y-3">
