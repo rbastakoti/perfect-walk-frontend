@@ -106,7 +106,12 @@ export default function InitPage() {
         ? Promise.resolve(markDone("places"))
         : fetch(`/api/places?lat=${lat}&lon=${lon}&category=all`)
             .then(r => r.json())
-            .then(data => { AppCache.set("places-all", data.places ?? []); markDone("places"); })
+            .then(data => {
+              const places = data.places ?? [];
+              // Only cache if we actually got results — empty array causes "No places found" on every visit
+              if (places.length > 0) AppCache.set("places-all", places);
+              markDone("places");
+            })
             .catch(() => markDone("places"));
 
       await Promise.allSettled([calendarPromise, weatherPromise, parksPromise, placesPromise]);

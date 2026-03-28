@@ -54,32 +54,40 @@ function getTypeInfo(tags: Record<string, string>): { label: string; category: s
 
 // ── Overpass query builder ────────────────────────────────────────────────────
 function buildQuery(lat: string, lon: string, category: string): string {
-  const r = `around:2000,${lat},${lon}`;
+  // 8000m (~5 mi) radius so small towns still return results
+  const r = `around:8000,${lat},${lon}`;
   const named = `["name"]`;
 
   const inner: Record<string, string> = {
     all: `
-      node["leisure"="park"]${named}(${r});
-      node["tourism"~"^(museum|attraction|gallery|theme_park|zoo|aquarium|viewpoint|artwork)$"]${named}(${r});
-      node["amenity"~"^(theatre|cinema|arts_centre|library)$"]${named}(${r});
-      way["leisure"="park"]${named}(${r});
+      node["leisure"~"^(park|nature_reserve|garden|playground|recreation_ground|dog_park|pitch|golf_course|sports_centre)$"]${named}(${r});
+      node["tourism"~"^(museum|attraction|gallery|theme_park|zoo|aquarium|viewpoint|artwork|historic|trail)$"]${named}(${r});
+      node["amenity"~"^(theatre|cinema|arts_centre|library|community_centre|place_of_worship)$"]${named}(${r});
+      node["historic"]${named}(${r});
+      node["natural"~"^(peak|waterfall|spring|cave_entrance|wood|water)$"]${named}(${r});
+      way["leisure"~"^(park|nature_reserve|garden|recreation_ground|sports_centre)$"]${named}(${r});
       way["tourism"~"^(museum|attraction|gallery|theme_park|zoo|aquarium)$"]${named}(${r});
-      relation["leisure"="park"]${named}(${r});
+      way["natural"~"^(wood|water|wetland)$"]${named}(${r});
+      relation["leisure"~"^(park|nature_reserve)$"]${named}(${r});
     `,
     parks: `
-      node["leisure"="park"]${named}(${r});
-      way["leisure"="park"]${named}(${r});
-      relation["leisure"="park"]${named}(${r});
+      node["leisure"~"^(park|nature_reserve|garden|playground|recreation_ground)$"]${named}(${r});
+      node["natural"~"^(peak|waterfall|spring|wood|water)$"]${named}(${r});
+      way["leisure"~"^(park|nature_reserve|garden|recreation_ground)$"]${named}(${r});
+      way["natural"~"^(wood|water|wetland)$"]${named}(${r});
+      relation["leisure"~"^(park|nature_reserve)$"]${named}(${r});
     `,
     attractions: `
       node["tourism"~"^(museum|attraction|gallery|theme_park|zoo|aquarium|viewpoint|artwork)$"]${named}(${r});
       node["amenity"~"^(theatre|cinema|arts_centre|library)$"]${named}(${r});
+      node["historic"]${named}(${r});
       way["tourism"~"^(museum|attraction|gallery|theme_park|zoo|aquarium)$"]${named}(${r});
       way["amenity"~"^(theatre|cinema|arts_centre)$"]${named}(${r});
+      way["historic"]${named}(${r});
     `,
   };
 
-  return `[out:json][timeout:8]; ( ${inner[category] ?? inner.all} ); out center tags 30;`;
+  return `[out:json][timeout:12]; ( ${inner[category] ?? inner.all} ); out center tags 50;`;
 }
 
 // ── Wikipedia / Wikidata enrichment ──────────────────────────────────────────
