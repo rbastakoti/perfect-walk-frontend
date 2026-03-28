@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { AppCache } from "@/lib/app-cache";
 
 interface OSMPlace {
   id: string;
@@ -57,7 +58,9 @@ const CATEGORY_BG: Record<string, string> = {
 };
 
 function formatDistance(m: number): string {
-  return m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`;
+  const miles = m / 1609.34;
+  if (miles < 0.1) return `${Math.round(m * 3.281)} ft`;
+  return `${miles.toFixed(1)} mi`;
 }
 
 function getIcon(tags: Record<string, string>): string {
@@ -201,42 +204,71 @@ export default function PlacesPage() {
     if (status === "unauthenticated") router.push("/");
   }, [status, router]);
 
+  // Use cached location from /init — no geolocation prompt needed
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation not supported by your browser.");
-      setLoading(false);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude: lat, longitude: lon } = pos.coords;
-        setLocation({ lat, lon });
-        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
-          .then((r) => r.json())
-          .then((d) => {
+    const cached = AppCache.get<{ lat: number; lon: number }>("location");
+    if (cached) {
+      setLocation(cached);
+      // Reverse-geocode for the display name (lightweight, cached separately)
+      const cachedName = AppCache.get<string>("place-name");
+      if (cachedName) {
+        setPlaceName(cachedName);
+      } else {
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${cached.lat}&lon=${cached.lon}&format=json`)
+          .then(r => r.json())
+          .then(d => {
             const a = d.address ?? {};
             const name = [a.suburb ?? a.neighbourhood ?? a.city_district, a.city ?? a.town ?? a.village]
               .filter(Boolean).join(", ");
-            setPlaceName(name || d.display_name?.split(",")[0] || null);
+            const display = name || d.display_name?.split(",")[0] || null;
+            if (display) { setPlaceName(display); AppCache.set("place-name", display); }
           })
           .catch(() => {});
-      },
-      (err) => { setLocationError(err.message); setLoading(false); },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+      }
+    } else if (navigator.geolocation) {
+      // Fallback if /init was skipped
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          setLocation(loc);
+          AppCache.set("location", loc);
+        },
+        (err) => { setLocationError(err.message); setLoading(false); },
+        { timeout: 8000 }
+      );
+    } else {
+      setLocationError("Geolocation not supported.");
+      setLoading(false);
+    }
   }, []);
 
   const fetchPlaces = useCallback((cat: string) => {
     if (!location) return;
+
+    // Cache hit — instant render
+    const cacheKey = `places-${cat}`;
+    const cached = AppCache.get<OSMPlace[]>(cacheKey);
+    if (cached) {
+      setPlaces(cached);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError("");
-    fetch(`/api/places?lat=${location.lat}&lon=${location.lon}&category=${cat}`)
-      .then((r) => r.json())
-      .then((data) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+
+    fetch(`/api/places?lat=${location.lat}&lon=${location.lon}&category=${cat}`, { signal: controller.signal })
+      .then(r => r.json())
+      .then(data => {
+        clearTimeout(timer);
         if (data.error) throw new Error(data.error);
-        setPlaces(data.places ?? []);
+        const results = data.places ?? [];
+        AppCache.set(cacheKey, results);
+        setPlaces(results);
       })
-      .catch((e) => setError(e.message))
+      .catch(e => { if (e.name !== "AbortError") setError(e.message); })
       .finally(() => setLoading(false));
   }, [location]);
 
@@ -281,7 +313,7 @@ export default function PlacesPage() {
             <span>📍</span>
             <span>{placeName ?? "Locating…"}</span>
             <span className="text-gray-300">·</span>
-            <span className="text-gray-400">within 2km</span>
+            <span className="text-gray-400">within 1.2 mi</span>
           </p>
         )}
       </div>

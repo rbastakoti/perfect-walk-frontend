@@ -79,7 +79,7 @@ function buildQuery(lat: string, lon: string, category: string): string {
     `,
   };
 
-  return `[out:json][timeout:20]; ( ${inner[category] ?? inner.all} ); out center tags 50;`;
+  return `[out:json][timeout:8]; ( ${inner[category] ?? inner.all} ); out center tags 30;`;
 }
 
 // ── Wikipedia / Wikidata enrichment ──────────────────────────────────────────
@@ -95,10 +95,10 @@ async function enrichPlace(tags: Record<string, string>): Promise<{
     const title = colonIdx > 0 ? tags.wikipedia.slice(colonIdx + 1) : tags.wikipedia;
     try {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 5000);
+      const t = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(
         `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-        { signal: controller.signal }
+        { signal: controller.signal, next: { revalidate: 86400 } }
       );
       clearTimeout(t);
       if (res.ok) {
@@ -118,10 +118,10 @@ async function enrichPlace(tags: Record<string, string>): Promise<{
   if (tags.wikidata) {
     try {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 5000);
+      const t = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(
         `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(tags.wikidata)}&format=json&props=descriptions%7Cclaims&languages=en`,
-        { signal: controller.signal }
+        { signal: controller.signal, next: { revalidate: 86400 } }
       );
       clearTimeout(t);
       if (res.ok) {
@@ -185,12 +185,12 @@ export async function GET(request: NextRequest) {
   for (const endpoint of overpassEndpoints) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       response = await fetch(endpoint, {
         method: "POST",
         body: new URLSearchParams({ data: query }),
         signal: controller.signal,
-        next: { revalidate: 300 },
+        next: { revalidate: 600 },
       });
       clearTimeout(timeoutId);
       if (response.ok) break;
@@ -218,13 +218,15 @@ export async function GET(request: NextRequest) {
     })
     .filter((el) => el._lat && el._lon)
     .sort((a, b) => a.distance - b.distance)
-    .slice(0, 20);
+    .slice(0, 12);
 
+  // Enrich only the first 8 with Wikipedia/Wikidata — the rest get name+type only
   const enriched = await Promise.all(
-    top20.map(async (el) => {
+    top20.map(async (el, i) => {
       const tags: Record<string, string> = el.tags || {};
       const { label: typeLabel, category: typeCategory } = getTypeInfo(tags);
-      const { description, imageUrl, wikiUrl } = await enrichPlace(tags);
+      // Only hit Wikipedia/Wikidata for the top 8 results to cap latency
+      const { description, imageUrl, wikiUrl } = i < 8 ? await enrichPlace(tags) : { description: null, imageUrl: null, wikiUrl: null };
       return {
         id: `${el.type}/${el.id}`,
         name: tags.name,
