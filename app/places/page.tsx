@@ -81,26 +81,40 @@ function PlaceCard({ place }: { place: OSMPlace }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md hover:border-indigo-200 transition-all group flex flex-col">
-      {/* Photo / fallback */}
+      {/* Photo / OSM map / gradient fallback */}
       <div className="relative h-44 overflow-hidden flex-shrink-0">
         {place.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={place.imageUrl}
-            alt={place.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={place.imageUrl}
+              alt={place.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              loading="lazy"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+                const sib = e.currentTarget.nextSibling as HTMLElement | null;
+                if (sib) sib.style.display = "block";
+              }}
+            />
+            {/* OSM fallback shown if photo 404s */}
+            <iframe
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=${place.lon-0.001},${place.lat-0.001},${place.lon+0.001},${place.lat+0.001}&layer=mapnik&marker=${place.lat},${place.lon}`}
+              title={place.name}
+              className="absolute inset-0 w-full h-full border-0"
+              loading="lazy"
+              style={{ display: "none" }}
+            />
+          </>
+        ) : (
+          /* No photo — show live OSM map, bbox ±0.001° ≈ street level */
+          <iframe
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${place.lon-0.001},${place.lat-0.001},${place.lon+0.001},${place.lat+0.001}&layer=mapnik&marker=${place.lat},${place.lon}`}
+            title={place.name}
+            className="absolute inset-0 w-full h-full border-0"
             loading="lazy"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-              (e.currentTarget.nextSibling as HTMLElement).style.display = "flex";
-            }}
           />
-        ) : null}
-        <div
-          className={`w-full h-full bg-gradient-to-br ${bgGrad} flex items-center justify-center ${place.imageUrl ? "hidden" : "flex"}`}
-        >
-          <span className="text-6xl opacity-30">{icon}</span>
-        </div>
+        )}
         {/* Distance badge */}
         <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-indigo-700 text-xs font-bold px-2 py-1 rounded-full shadow-sm">
           {formatDistance(place.distance)}
@@ -245,10 +259,10 @@ export default function PlacesPage() {
   const fetchPlaces = useCallback((cat: string) => {
     if (!location) return;
 
-    // Cache hit — instant render
+    // Cache hit — instant render (only use cache if it has results)
     const cacheKey = `places-${cat}`;
     const cached = AppCache.get<OSMPlace[]>(cacheKey);
-    if (cached) {
+    if (cached && cached.length > 0) {
       setPlaces(cached);
       setLoading(false);
       return;
@@ -265,7 +279,7 @@ export default function PlacesPage() {
         clearTimeout(timer);
         if (data.error) throw new Error(data.error);
         const results = data.places ?? [];
-        AppCache.set(cacheKey, results);
+        if (results.length > 0) AppCache.set(cacheKey, results);
         setPlaces(results);
       })
       .catch(e => { if (e.name !== "AbortError") setError(e.message); })
@@ -313,7 +327,7 @@ export default function PlacesPage() {
             <span>📍</span>
             <span>{placeName ?? "Locating…"}</span>
             <span className="text-gray-300">·</span>
-            <span className="text-gray-400">within 1.2 mi</span>
+            <span className="text-gray-400">within 5 mi</span>
           </p>
         )}
       </div>

@@ -11,6 +11,7 @@ interface Trail {
   difficulty: "Easy" | "Moderate" | "Challenging";
   tags: string[]; description: string; color: string;
   mapBg: string; mapPath: string; dotX: number; dotY: number;
+  lat?: number; lon?: number; // real coordinates for map tile
 }
 
 // ── Static fallback trails (used if location is denied) ─────────────────────
@@ -52,6 +53,9 @@ function mapParkToTrail(park: any, idx: number): Trail {
     park.tags?.description ||
     `A ${difficulty.toLowerCase()} walk — ${walkMin} min from your location.`;
 
+  const pLat = park.lat ?? park.center?.lat;
+  const pLon = park.lon ?? park.center?.lon;
+
   return {
     id:         String(park.id),
     name,
@@ -65,6 +69,8 @@ function mapParkToTrail(park: any, idx: number): Trail {
     mapPath:    MAP_PATHS[ci],
     dotX:       DOT_POS[ci].x,
     dotY:       DOT_POS[ci].y,
+    lat:        pLat,
+    lon:        pLon,
   };
 }
 
@@ -84,21 +90,142 @@ function fmt(s: number) {
 }
 
 function TrailMap({ trail }: { trail: Trail }) {
+  // If we have real coordinates, embed an OpenStreetMap tile view
+  if (trail.lat && trail.lon) {
+    const delta = 0.007; // ~0.5 mi bounding box
+    const bbox  = `${trail.lon - delta},${trail.lat - delta},${trail.lon + delta},${trail.lat + delta}`;
+    const src   = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${trail.lat},${trail.lon}`;
+    return (
+      <div className="relative overflow-hidden rounded-2xl" style={{ height: "220px" }}>
+        <iframe
+          src={src}
+          title={trail.name}
+          className="absolute inset-0 w-full h-full border-0"
+          loading="lazy"
+        />
+        {/* Overlay bar at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 text-[10px] font-semibold"
+          style={{ background: "rgba(10,14,30,0.75)", backdropFilter: "blur(8px)", color: "#8494FF" }}>
+          <span style={{ color: trail.color }}>{trail.name}</span>
+          <span>{trail.distance} · {trail.duration} min loop</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: stylised terrain illustration for demo trails without coordinates
+  const uid = trail.id.replace(/\W/g, "");
   return (
-    <div className="relative overflow-hidden rounded-2xl" style={{ height: 220, background: "#0a0e1e" }}>
-      <svg viewBox="0 0 400 220" className="absolute inset-0 h-full w-full">
-        {[30, 70, 110, 150, 190].map(y => <line key={y} x1="0" y1={y} x2="400" y2={y} stroke="#141c34" strokeWidth="1" />)}
-        {[50, 120, 190, 260, 330, 400].map(x => <line key={x} x1={x} y1="0" x2={x} y2="220" stroke="#141c34" strokeWidth="1" />)}
-        <rect x="40" y="15" width="320" height="190" rx="14" fill={trail.mapBg} opacity="0.85" />
-        <path d={trail.mapPath} fill="none" stroke={trail.color} strokeWidth="3" strokeDasharray="8 4" strokeLinecap="round" />
-        <circle cx={trail.dotX} cy={trail.dotY} r="7"  fill={trail.color} />
-        <circle cx={trail.dotX} cy={trail.dotY} r="14" fill="none" stroke={trail.color} strokeWidth="2" opacity="0.35" />
-        <circle cx={trail.dotX} cy={trail.dotY} r="22" fill="none" stroke={trail.color} strokeWidth="1" opacity="0.15" />
+    <div className="relative overflow-hidden rounded-2xl" style={{ height: "220px" }}>
+      <svg viewBox="0 0 400 220" className="absolute inset-0 h-full w-full" style={{ display: "block" }}>
+        <defs>
+          {/* terrain gradient */}
+          <linearGradient id={`bg-${uid}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%"   stopColor="#1a3a2a" />
+            <stop offset="50%"  stopColor="#14301e" />
+            <stop offset="100%" stopColor="#0e2218" />
+          </linearGradient>
+          {/* trail glow */}
+          <filter id={`glow-${uid}`} x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          {/* pin shadow */}
+          <filter id={`pin-${uid}`}>
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor={trail.color} floodOpacity="0.5" />
+          </filter>
+          {/* colour tint overlay */}
+          <linearGradient id={`tint-${uid}`} x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stopColor={trail.color} stopOpacity="0.10" />
+            <stop offset="100%" stopColor={trail.color} stopOpacity="0.03" />
+          </linearGradient>
+        </defs>
+
+        {/* base terrain */}
+        <rect width="400" height="220" fill={`url(#bg-${uid})`} />
+
+        {/* topographic contour lines */}
+        {[
+          "M0 160 Q80 145 160 155 Q240 165 320 148 Q370 138 400 142",
+          "M0 130 Q60 118 140 128 Q220 138 300 120 Q360 108 400 113",
+          "M0 100 Q70 88 150 98 Q230 108 310 90 Q365 78 400 84",
+          "M0 72  Q80 60 160 70 Q240 80 320 62 Q372 50 400 56",
+        ].map((d, i) => (
+          <path key={i} d={d} fill="none" stroke="#22c55e" strokeWidth="0.6" strokeOpacity={0.18 - i * 0.03} />
+        ))}
+
+        {/* water / lake accent (only for water-themed trails) */}
+        {trail.color === "#0ea5e9" && (
+          <ellipse cx="310" cy="80" rx="55" ry="22" fill="#0ea5e9" fillOpacity="0.12" />
+        )}
+
+        {/* small tree clusters */}
+        {[[60,140],[75,128],[90,142],[180,72],[195,60],[210,74],[310,150],[325,138]].map(([x,y],i)=>(
+          <g key={i} transform={`translate(${x},${y})`} opacity="0.55">
+            <polygon points="0,-11 7,4 -7,4" fill="#22c55e" opacity="0.8" />
+            <polygon points="0,-7 5,5 -5,5" fill="#16a34a" opacity="0.6" transform="translate(0,6)" />
+          </g>
+        ))}
+
+        {/* colour tint wash */}
+        <rect width="400" height="220" fill={`url(#tint-${uid})`} />
+
+        {/* trail path — solid with glow */}
+        <path d={trail.mapPath} fill="none" stroke={trail.color} strokeWidth="2.5"
+          strokeLinecap="round" strokeLinejoin="round" opacity="0.35" />
+        <path d={trail.mapPath} fill="none" stroke={trail.color} strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round"
+          filter={`url(#glow-${uid})`} />
+
+        {/* distance tick marks along path — decorative dashes */}
+        <path d={trail.mapPath} fill="none" stroke="white" strokeWidth="1"
+          strokeDasharray="2 28" strokeLinecap="round" opacity="0.25" />
+
+        {/* location pin */}
+        <g filter={`url(#pin-${uid})`}>
+          {/* pin body */}
+          <ellipse cx={trail.dotX} cy={trail.dotY + 1} rx="9" ry="9" fill={trail.color} opacity="0.25" />
+          <circle  cx={trail.dotX} cy={trail.dotY}     r="7"  fill={trail.color} />
+          <circle  cx={trail.dotX} cy={trail.dotY}     r="3"  fill="white" opacity="0.9" />
+        </g>
+        {/* pulse rings */}
+        <circle cx={trail.dotX} cy={trail.dotY} r="14" fill="none" stroke={trail.color} strokeWidth="1.5" opacity="0.35" />
+        <circle cx={trail.dotX} cy={trail.dotY} r="22" fill="none" stroke={trail.color} strokeWidth="0.8" opacity="0.18" />
+
+        {/* compass rose (top-right) */}
+        <g transform="translate(370,22)" opacity="0.45">
+          <circle cx="0" cy="0" r="10" fill="none" stroke="#ffffff" strokeWidth="0.8" />
+          <text x="0" y="-13" textAnchor="middle" fontSize="7" fill="white" fontWeight="bold">N</text>
+          <line x1="0" y1="-7" x2="0" y2="7" stroke="white" strokeWidth="0.8" />
+          <line x1="-7" y1="0" x2="7" y2="0" stroke="white" strokeWidth="0.8" />
+          <polygon points="0,-7 2.5,0 -2.5,0" fill={trail.color} />
+        </g>
       </svg>
-      <div className="absolute top-3 left-3 rounded-lg px-2.5 py-1 text-xs font-bold backdrop-blur-sm"
-        style={{ background: `${trail.color}28`, color: trail.color }}>{trail.name}</div>
-      <div className="absolute bottom-3 right-3 flex items-center gap-2 text-[10px]" style={{ color: "#8494FF" }}>
-        <span>{trail.distance}</span><span>·</span><span>{trail.duration} min loop</span>
+
+      {/* name pill — top left */}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold backdrop-blur-md"
+        style={{ background: "rgba(0,0,0,0.45)", color: "white", border: `1px solid ${trail.color}55` }}>
+        <span style={{ color: trail.color }}>●</span> {trail.name}
+      </div>
+
+      {/* difficulty pill — top right (moved left of compass) */}
+      <div className="absolute top-3 right-12 rounded-full px-2.5 py-1 text-[10px] font-bold backdrop-blur-md"
+        style={{ background: `${trail.color}30`, color: trail.color, border: `1px solid ${trail.color}44` }}>
+        {trail.difficulty}
+      </div>
+
+      {/* bottom bar */}
+      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-2.5"
+        style={{ background: "linear-gradient(to top, rgba(5,12,15,0.85), transparent)", backdropFilter: "blur(4px)" }}>
+        <div className="flex items-center gap-2 text-xs text-white/70">
+          <span className="text-base">🚶</span>
+          <span>{trail.distance} loop</span>
+        </div>
+        <div className="flex items-center gap-3 text-[11px]">
+          <span className="font-semibold" style={{ color: trail.color }}>{trail.duration} min</span>
+          <span className="text-white/40">·</span>
+          <span className="text-white/50">{trail.tags[0]}</span>
+        </div>
       </div>
     </div>
   );
@@ -421,7 +548,7 @@ export default function WalkPage() {
         <p className="text-4xl mb-2">🎉</p>
         <h1 className="text-2xl font-bold">Walk Complete!</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--fg-muted)" }}>
-          {selectedTrail.name} · {Math.round((totalSeconds - remaining) / 60)} min · {km} km
+          {selectedTrail.name} · {Math.round((totalSeconds - remaining) / 60)} min · {miles} mi
         </p>
       </div>
 
