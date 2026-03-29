@@ -465,9 +465,60 @@ export default function WalkPage() {
   const diff    = DIFF_STYLE[selectedTrail.difficulty];
 
   useEffect(() => {
-    const cachedBriefing = AppCache.get<string>("ai-briefing");
-    if (cachedBriefing) setAiBriefing(cachedBriefing);
-  }, []);
+    // 24-hour cache for AI briefing
+    const cachedBriefingObj = AppCache.get<{ value: string; timestamp: number }>("ai-briefing");
+    const now = Date.now();
+    const isBriefingValid = cachedBriefingObj && (now - cachedBriefingObj.timestamp < 24 * 60 * 60 * 1000);
+    if (isBriefingValid) {
+      setAiBriefing(cachedBriefingObj.value);
+      return;
+    }
+    // Wait for weather, calendar, parks to be loaded from cache or fetched
+    const tryGenerateBriefing = () => {
+      const locationData = AppCache.get<{ lat: number; lon: number }>("location");
+      const calendarData = AppCache.get<{ events: any[] }>("calendar");
+      const weatherData = AppCache.get<any>("weather");
+      const parksData = AppCache.get<any>("parks");
+      const placesData = AppCache.get<any[]>("places-all");
+      if (calendarData && weatherData && parksData) {
+        const aiPayload = {
+          user_name: session?.user?.name || "User",
+          location: locationData ? `${locationData.lat},${locationData.lon}` : undefined,
+          calendar: calendarData,
+          weather: weatherData,
+          parks: parksData?.elements ?? parksData,
+          places: placesData,
+          walk_options: [],
+        };
+        fetch("/api/ai/briefing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(aiPayload),
+        })
+          .then(async r => {
+            if (!r.ok) {
+              const text = await r.text();
+              throw new Error(`AI briefing API error: ${r.status} ${text}`);
+            }
+            return r.json();
+          })
+          .then(data => {
+            if (data && data.briefing) {
+              setAiBriefing(data.briefing);
+              AppCache.set("ai-briefing", { value: data.briefing, timestamp: Date.now() });
+            }
+          })
+          .catch(err => {
+            // eslint-disable-next-line no-console
+            console.error("Error fetching AI briefing:", err);
+          });
+      } else {
+        // Retry after a short delay if not all data is loaded
+        setTimeout(tryGenerateBriefing, 500);
+      }
+    };
+    tryGenerateBriefing();
+  }, [session]);
 
   /* ── TRAIL phase ── */
   if (phase === "trail") {
