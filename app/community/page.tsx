@@ -29,15 +29,42 @@ interface WallPost {
   isNew?: boolean;
 }
 
-const FEELING_TAG_COLORS: Record<string, string> = {
-  energized: "bg-green-100 text-green-800",
-  peaceful: "bg-blue-100 text-blue-800",
-  accomplished: "bg-purple-100 text-purple-800",
-  happy: "bg-yellow-100 text-yellow-800",
-  motivated: "bg-orange-100 text-orange-800",
-  confident: "bg-indigo-100 text-indigo-800",
-  refreshed: "bg-teal-100 text-teal-800",
+// ── Avatar system ────────────────────────────────────────────────────────────
+const AVATARS = [
+  { emoji: "🌿", bg: "rgba(34,120,60,0.4)" },
+  { emoji: "🌙", bg: "rgba(90,70,180,0.4)" },
+  { emoji: "🍃", bg: "rgba(60,110,60,0.4)" },
+  { emoji: "✨", bg: "rgba(40,90,70,0.4)" },
+  { emoji: "🌱", bg: "rgba(30,130,80,0.4)" },
+  { emoji: "🦋", bg: "rgba(100,60,160,0.4)" },
+  { emoji: "🌾", bg: "rgba(120,90,40,0.4)" },
+  { emoji: "🍀", bg: "rgba(20,110,55,0.4)" },
+];
+
+function getAvatar(postId: string) {
+  const hash = postId.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATARS[hash % AVATARS.length];
+}
+
+// ── Tag styles ────────────────────────────────────────────────────────────────
+const TAG_STYLES: Record<string, { background: string; color: string }> = {
+  burnout:      { background: "rgba(217,119,6,0.18)",   color: "#b45309" },
+  family:       { background: "rgba(234,179,8,0.18)",   color: "#a16207" },
+  uncertain:    { background: "rgba(139,92,246,0.18)",  color: "#7c3aed" },
+  career:       { background: "rgba(20,184,166,0.18)",  color: "#0f766e" },
+  walk:         { background: "rgba(34,197,94,0.18)",   color: "#15803d" },
+  energized:    { background: "rgba(34,197,94,0.18)",   color: "#15803d" },
+  peaceful:     { background: "rgba(96,165,250,0.18)",  color: "#1d4ed8" },
+  accomplished: { background: "rgba(167,139,250,0.18)", color: "#6d28d9" },
+  happy:        { background: "rgba(250,204,21,0.18)",  color: "#a16207" },
+  motivated:    { background: "rgba(251,146,60,0.18)",  color: "#c2410c" },
+  confident:    { background: "rgba(99,102,241,0.18)",  color: "#4338ca" },
+  refreshed:    { background: "rgba(45,212,191,0.18)",  color: "#0f766e" },
 };
+
+function getTagStyle(tag: string) {
+  return TAG_STYLES[tag] ?? { background: "rgba(120,120,140,0.2)", color: "var(--fg-muted)" };
+}
 
 function relTime(timestamp: string): string {
   const now = new Date();
@@ -52,9 +79,6 @@ function relTime(timestamp: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function getUserInitials(username: string): string {
-  return username.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-}
 
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
@@ -131,8 +155,9 @@ function FeedSkeleton() {
   );
 }
 
-function PostCard({ post, liked, onToggleLike }: { post: WallPost; liked: boolean; onToggleLike: (postId: string) => void }) {
+function PostCard({ post, liked, onToggleLike }: { post: WallPost; liked: boolean; onToggleLike: (postId: string) => Promise<void> }) {
   const [liking, setLiking] = useState(false);
+  const avatar = getAvatar(post.postId);
 
   const handleLike = async () => {
     if (liking) return;
@@ -141,99 +166,94 @@ function PostCard({ post, liked, onToggleLike }: { post: WallPost; liked: boolea
     setLiking(false);
   };
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case "Easy": return "bg-green-100 text-green-800";
-      case "Moderate": return "bg-yellow-100 text-yellow-800";
-      case "Hard": return "bg-red-100 text-red-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
-  };
-
   return (
-    <article className={`flex flex-col rounded-2xl p-4 h-full ${post.isNew ? "animate-post-in" : ""}`}
-      style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)" }}>
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-            style={{ background: "var(--primary)", color: "white" }}>
-            {getUserInitials(post.username)}
+    <article
+      className={`flex flex-col rounded-2xl p-5 ${post.isNew ? "animate-post-in" : ""}`}
+      style={{ border: "1px solid var(--border)", boxShadow: "var(--shadow-md)" }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div
+            className="h-5 w-5 shrink-0 rounded-full flex items-center justify-center text-lg"
+            style={{ background: avatar.bg }}
+          >
+            {avatar.emoji}
           </div>
-          <div>
-            <div className="text-sm font-medium" style={{ color: "var(--fg)" }}>
-              {post.username}
-            </div>
-            <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
-              {relTime(post.timestamp)}
-            </span>
-          </div>
-        </div>
-        {post.currentMood && (
-          <span className="shrin k-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold"
-            style={{ background: "rgba(99,103,255,0.1)", color: "#6367FF" }}>
-            😊 {post.currentMood}/5
+          <span className="text-sm font-medium" style={{ color: "var(--fg)" }}>
+            Anonymous walker
           </span>
-        )}
-      </div>
-      
-      <p className="text-sm leading-relaxed" style={{ color: "var(--fg)" }}>{post.content}</p>
-      
-      {/* Feeling Tags */}
-      {post.feelingTags && post.feelingTags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {post.feelingTags.map(tag => (
-            <span key={tag} className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-              FEELING_TAG_COLORS[tag] || "bg-gray-100 text-gray-800"
-            }`}>
-              {tag}
-            </span>
-          ))}
         </div>
-      )}
-      
-      {/* Attached Walk Session */}
+        <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
+          {relTime(post.timestamp)}
+        </span>
+      </div>
+
+      {/* Content */}
+      <p className="text-base leading-snug font-medium mb-4" style={{ color: "var(--fg)" }}>
+        {post.content}
+      </p>
+
+      {/* Attached Walk */}
       {post.attachedWalk && (
-        <div className="mt-3 rounded-xl p-3" 
-          style={{ background: "var(--primary-dim)", border: "1px solid var(--border)" }}>
-          <div className="flex items-center justify-between mb-2">
+        <div className="rounded-xl p-3 mb-4" style={{ border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs">🚶‍♀️</span>
+              <span>🚶</span>
               <span className="text-sm font-semibold">{post.attachedWalk.trailName}</span>
             </div>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-              getDifficultyColor(post.attachedWalk.difficulty)
-            }`}>
+            <span
+              className="rounded-full px-2 py-0.5 text-xs font-bold"
+              style={
+                post.attachedWalk.difficulty === "Easy"
+                  ? { background: "rgba(34,197,94,0.15)", color: "#4ade80" }
+                  : post.attachedWalk.difficulty === "Moderate"
+                  ? { background: "rgba(251,146,60,0.15)", color: "#fb923c" }
+                  : { background: "rgba(239,68,68,0.15)", color: "#f87171" }
+              }
+            >
               {post.attachedWalk.difficulty}
             </span>
           </div>
-          <div className="flex items-center justify-between text-xs" style={{ color: "var(--fg-muted)" }}>
+          <div className="flex gap-4 text-xs" style={{ color: "var(--fg-muted)" }}>
             <span>{post.attachedWalk.distance}</span>
             <span>{post.attachedWalk.actualDuration} min</span>
             <span>{post.attachedWalk.estimatedSteps} steps</span>
-            <span>{post.attachedWalk.estimatedCalories} cal</span>
             {post.attachedWalk.moodImprovement > 0 && (
-              <span style={{ color: "#22c55e" }}>+{post.attachedWalk.moodImprovement} mood</span>
+              <span style={{ color: "#4ade80" }}>+{post.attachedWalk.moodImprovement} mood</span>
             )}
           </div>
         </div>
       )}
-      
-      <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
-        <button type="button" onClick={handleLike} disabled={liking}
-          className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+        <button
+          type="button"
+          onClick={handleLike}
+          disabled={liking}
+          className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
           style={{
-            background: liked ? "rgba(239,68,68,0.1)" : "var(--primary-dim)",
-            color: liked ? "#ef4444" : "var(--fg-muted)",
-            border: `1px solid ${liked ? "rgba(239,68,68,0.3)" : "var(--border)"}`,
-          }}>
+            border: `1px solid ${liked ? "rgba(239,68,68,0.35)" : "var(--border)"}`,
+            color: liked ? "#f87171" : "var(--fg-muted)",
+          }}
+        >
           <HeartIcon filled={liked} />
-          <span className="tabular-nums">{post.likes.toLocaleString()}</span>
+          <span>Me too · <span className="tabular-nums">{post.likes.toLocaleString()}</span></span>
         </button>
-        
-        {post.comments > 0 && (
-          <span className="text-xs" style={{ color: "var(--fg-muted)" }}>
-            {post.comments} comment{post.comments !== 1 ? 's' : ''}
-          </span>
+
+        {post.feelingTags && post.feelingTags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {post.feelingTags.map(tag => (
+              <span
+                key={tag}
+                className="rounded-full px-3 py-1 text-xs font-medium"
+                style={getTagStyle(tag)}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         )}
       </div>
     </article>
