@@ -386,7 +386,8 @@ export default function WalkPage() {
   };
 
   // Capture complete walking session data including user info
-  const captureWalkingSession = () => {
+  // afterMoodValue is passed explicitly to avoid stale closure capture
+  const captureWalkingSession = (afterMoodValue: number | null) => {
     const elapsed = totalSeconds - remaining;
     const steps = Math.round(elapsed * 1.4);
     const miles = (steps * 0.000435).toFixed(2);
@@ -411,16 +412,16 @@ export default function WalkPage() {
       distance: selectedTrail.distance,
       difficulty: selectedTrail.difficulty,
       locationUsed: locationStatus === "granted",
-      
+
       // Activity metrics
       estimatedSteps: steps,
       estimatedDistance: parseFloat(miles),
       estimatedCalories: cal,
 
-      // Wellness/mood tracking
+      // Wellness/mood tracking — use passed value, not closure
       moodBefore: beforeMood,
-      moodAfter: afterMood,
-      moodImprovement: afterMood && beforeMood ? afterMood - beforeMood : 0,
+      moodAfter: afterMoodValue,
+      moodImprovement: afterMoodValue && beforeMood ? afterMoodValue - beforeMood : 0,
       burnoutScoreAtTime: burnoutScore,
 
       // Session metadata
@@ -637,7 +638,7 @@ export default function WalkPage() {
               return;
             }
 
-            const walkData = captureWalkingSession();
+            const walkData = captureWalkingSession(afterMood);
             
             try {
               setSaved(true); // Show saving state immediately
