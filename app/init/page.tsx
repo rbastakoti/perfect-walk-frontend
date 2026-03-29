@@ -115,6 +115,66 @@ export default function InitPage() {
             .catch(() => markDone("places"));
 
       await Promise.allSettled([calendarPromise, weatherPromise, parksPromise, placesPromise]);
+      // Gather all loaded data from cache
+      const locationData = AppCache.get<{ lat: number; lon: number }>("location");
+      const calendarData = AppCache.get<{ events: any[] }>("calendar");
+      const weatherData = AppCache.get<any>("weather");
+      const parksData = AppCache.get<any>("parks");
+      const placesData = AppCache.get<any[]>("places-all");
+
+      // Prepare data for AI endpoints
+      const aiPayload = {
+        user_name: "User", // You can replace with actual user name if available
+        location: locationData ? `${locationData.lat},${locationData.lon}` : undefined,
+        calendar: calendarData,
+        weather: weatherData,
+        parks: parksData?.elements ?? parksData,
+        places: placesData,
+        walk_options: [], // You can fill this with walk options if available
+      };
+
+      // Call AI endpoints and log responses
+      try {
+        const [briefingRes, walkRecRes] = await Promise.all([
+          fetch("/api/ai/briefing", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(aiPayload),
+          }).then(async r => {
+            if (!r.ok) {
+              const text = await r.text();
+              throw new Error(`AI briefing API error: ${r.status} ${text}`);
+            }
+            return r.json();
+          }),
+          fetch("/api/ai/walk-recommendation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(aiPayload),
+          }).then(async r => {
+            if (!r.ok) {
+              const text = await r.text();
+              throw new Error(`AI walk-recommendation API error: ${r.status} ${text}`);
+            }
+            return r.json();
+          }),
+        ]);
+        if (briefingRes && briefingRes.briefing) {
+          AppCache.set("ai-briefing", briefingRes.briefing);
+        }
+        if (walkRecRes && (walkRecRes.recommendations || walkRecRes.recommendation)) {
+          // Support both: single object or array
+          const rec = walkRecRes.recommendation || (Array.isArray(walkRecRes.recommendations) ? walkRecRes.recommendations[0] : walkRecRes.recommendations);
+          if (rec) AppCache.set("ai-walk-recommendation", rec);
+        }
+        // eslint-disable-next-line no-console
+        console.log("AI Briefing Response:", briefingRes);
+        // eslint-disable-next-line no-console
+        console.log("AI Walk Recommendation Response:", walkRecRes);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("Error calling AI endpoints:", err);
+      }
 
       // Small pause so the user sees all steps complete before navigating
       setTimeout(() => router.replace("/dashboard"), 400);

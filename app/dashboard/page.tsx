@@ -102,6 +102,10 @@ function greeting() {
 }
 
 export default function DashboardPage() {
+    // AI Briefing and Walk Recommendation
+    const [aiBriefing, setAiBriefing] = useState<string>("");
+    const [aiWalkRec, setAiWalkRec] = useState<any>(null);
+
   const router = useRouter();
   const { status } = useSession();
   const [view, setView] = useState<"checkin" | "dashboard">("checkin");
@@ -124,6 +128,54 @@ export default function DashboardPage() {
     if (savedDate === today && savedScore >= 1 && savedScore <= 5) {
       setScore(savedScore);
       setView("dashboard");
+    }
+
+    // Load AI Briefing and Walk Recommendation from cache
+    const cachedBriefing = AppCache.get<string>("ai-briefing");
+    if (cachedBriefing) setAiBriefing(cachedBriefing);
+    let cachedRec = AppCache.get<any>("ai-walk-recommendation");
+    if (cachedRec) setAiWalkRec(cachedRec);
+
+    // If not in cache, fetch AI walk recommendation using latest context
+    if (!cachedRec) {
+      // Gather latest context from cache
+      const locationData = AppCache.get<{ lat: number; lon: number }>("location");
+      const calendarData = AppCache.get<{ events: any[] }>("calendar");
+      const weatherData = AppCache.get<any>("weather");
+      const parksData = AppCache.get<any>("parks");
+      const placesData = AppCache.get<any[]>("places-all");
+      const aiPayload = {
+        user_name: "User",
+        location: locationData ? `${locationData.lat},${locationData.lon}` : undefined,
+        calendar: calendarData,
+        weather: weatherData,
+        parks: parksData?.elements ?? parksData,
+        places: placesData,
+        walk_options: [],
+      };
+      fetch("/api/ai/walk-recommendation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(aiPayload),
+      })
+        .then(async r => {
+          if (!r.ok) {
+            const text = await r.text();
+            throw new Error(`AI walk-recommendation API error: ${r.status} ${text}`);
+          }
+          return r.json();
+        })
+        .then(walkRecRes => {
+          let rec = walkRecRes.recommendation || (Array.isArray(walkRecRes.recommendations) ? walkRecRes.recommendations[0] : walkRecRes.recommendations);
+          if (rec) {
+            AppCache.set("ai-walk-recommendation", rec);
+            setAiWalkRec(rec);
+          }
+        })
+        .catch(err => {
+          // eslint-disable-next-line no-console
+          console.error("Error fetching AI walk recommendation on dashboard:", err);
+        });
     }
 
     // ── Load weather from cache (instant) ──────────────────────────────────
@@ -434,29 +486,114 @@ export default function DashboardPage() {
             </div>
           )}
 
+
           {showWalkRec && (
-            <div className="rounded-2xl p-5 space-y-4 animate-slide-up"
-              style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "var(--accent1)" }}>Perfect Walk Found</p>
-                <h2 className="text-lg font-bold">{bestParkName}</h2>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {[
-                    bestParkDist ? `📍 ${bestParkDist}` : "🚶 Nearby",
-                    walkSlot ? `⏱ ${walkSlot.end - walkSlot.start} min window` : "🔄 Loop trail",
-                    weather ? `${weatherEmoji(weather.weather?.[0]?.main ?? "")} ${Math.round(weather.main?.temp ?? 0)}°C` : "☀️ Check weather",
-                  ].map((b) => (
-                    <span key={b} className="rounded-full px-2.5 py-1 text-xs font-semibold"
-                      style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>{b}</span>
-                  ))}
+            <>
+              {/* Existing "Perfect Walk Found" card */}
+              <div className="rounded-2xl p-5 space-y-4 animate-slide-up"
+                style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "var(--accent1)" }}>Perfect Walk Found</p>
+                  <h2 className="text-lg font-bold">{bestParkName}</h2>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {[
+                      bestParkDist ? `📍 ${bestParkDist}` : "🚶 Nearby",
+                      walkSlot ? `⏱ ${walkSlot.end - walkSlot.start} min window` : "🔄 Loop trail",
+                      weather ? `${weatherEmoji(weather.weather?.[0]?.main ?? "")} ${Math.round(weather.main?.temp ?? 0)}°C` : "☀️ Check weather",
+                    ].map((b) => (
+                      <span key={b} className="rounded-full px-2.5 py-1 text-xs font-semibold"
+                        style={{ background: "var(--primary-dim)", color: "var(--primary)" }}>{b}</span>
+                    ))}
+                  </div>
                 </div>
+                <button type="button" onClick={handleGoNow}
+                  className="btn-primary w-full py-3 text-center text-sm"
+                  style={{ background: "var(--primary)" }}>
+                  Go Now — Start Walk →
+                </button>
               </div>
-              <button type="button" onClick={handleGoNow}
-                className="btn-primary w-full py-3 text-center text-sm"
-                style={{ background: "var(--primary)" }}>
-                Go Now — Start Walk →
-              </button>
-            </div>
+
+              {/* AI Walk Recommendation Card (if available) */}
+              {aiWalkRec && (
+                (() => {
+                  // Normalize fields for display
+                  const name = aiWalkRec.name || aiWalkRec.title || "Recommended Walk";
+                  const typeLabel = aiWalkRec.typeLabel || aiWalkRec.type || "Walk";
+                  const typeCategory = aiWalkRec.typeCategory || "leisure";
+                  const description = aiWalkRec.description || aiWalkRec.desc || "A great walk recommended for you.";
+                  const distance = aiWalkRec.distance ? (typeof aiWalkRec.distance === "number" ? `${aiWalkRec.distance} mi` : aiWalkRec.distance) : null;
+                  const duration = aiWalkRec.duration || null;
+                  const features = Array.isArray(aiWalkRec.features) ? aiWalkRec.features : (aiWalkRec.features ? [aiWalkRec.features] : []);
+                  const lat = aiWalkRec.lat || aiWalkRec.latitude || null;
+                  const lon = aiWalkRec.lon || aiWalkRec.longitude || null;
+                  const osmUrl = aiWalkRec.osmUrl || (lat && lon ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}` : null);
+
+                  // Map rendering (like PlaceCard)
+                  return (
+                    <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden hover:shadow-md transition-all group flex flex-col animate-slide-up">
+                      {/* Map or fallback */}
+                      <div className="relative h-44 overflow-hidden flex-shrink-0">
+                        {lat && lon ? (
+                          <iframe
+                            src={`https://www.openstreetmap.org/export/embed.html?bbox=${lon-0.001},${lat-0.001},${lon+0.001},${lat+0.001}&layer=mapnik&marker=${lat},${lon}`}
+                            title={name}
+                            className="absolute inset-0 w-full h-full border-0"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full w-full bg-indigo-50 text-indigo-400 text-4xl">🚶</div>
+                        )}
+                        {distance && (
+                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-indigo-700 text-xs font-bold px-2 py-1 rounded-full shadow-sm">
+                            {distance}
+                          </div>
+                        )}
+                      </div>
+                      {/* Info */}
+                      <div className="p-4 flex flex-col flex-1">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                            AI Recommended Walk
+                          </span>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                            {typeLabel}
+                          </span>
+                          {features.length > 0 && (
+                            <span className="text-xs text-gray-400 capitalize">{features.join(" · ")}</span>
+                          )}
+                        </div>
+                        <h3 className="font-semibold text-gray-800 text-base leading-tight mb-1.5 group-hover:text-indigo-700 transition-colors line-clamp-2">
+                          {name}
+                        </h3>
+                        {description && (
+                          <p className="text-xs text-gray-500 line-clamp-3 leading-relaxed mb-2">
+                            {description}
+                          </p>
+                        )}
+                        {duration && (
+                          <span className="rounded-full px-2.5 py-1 text-xs font-semibold bg-green-100 text-green-700 mb-2 w-max">
+                            {duration}
+                          </span>
+                        )}
+                        {/* Links */}
+                        <div className="flex gap-3 mt-auto pt-2.5 border-t border-gray-50">
+                          {osmUrl && (
+                            <a
+                              href={osmUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                            >
+                              OpenStreetMap →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+            </>
           )}
 
           {!showWalkRec && (
@@ -482,7 +619,9 @@ export default function DashboardPage() {
           <span className="text-lg">🤖</span>
           <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>AI Walk Briefing</p>
         </div>
-        <p className="text-sm leading-7 italic" style={{ color: "var(--fg)" }}>{aiBriefings[score!]}</p>
+        <p className="text-sm leading-7 italic" style={{ color: "var(--fg)" }}>
+          {aiBriefing || aiBriefings[score!]}
+        </p>
       </div>
     </div>
   );

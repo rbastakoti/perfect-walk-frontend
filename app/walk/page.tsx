@@ -288,6 +288,8 @@ function Ring({ remaining, total }: { remaining: number; total: number }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function WalkPage() {
+    // AI Briefing
+    const [aiBriefing, setAiBriefing] = useState<string>("");
   const router = useRouter();
   const { data: session } = useSession();
 
@@ -462,6 +464,11 @@ export default function WalkPage() {
   const cal     = Math.round(elapsed * 0.08);
   const diff    = DIFF_STYLE[selectedTrail.difficulty];
 
+  useEffect(() => {
+    const cachedBriefing = AppCache.get<string>("ai-briefing");
+    if (cachedBriefing) setAiBriefing(cachedBriefing);
+  }, []);
+
   /* ── TRAIL phase ── */
   if (phase === "trail") {
     return (
@@ -525,7 +532,7 @@ export default function WalkPage() {
           </div>
           <div className="rounded-2xl p-4" style={{ background: "linear-gradient(135deg, var(--primary-dim), rgba(255,219,253,0.08))", border: "1px solid var(--border)" }}>
             <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: "var(--accent1)" }}>🤖 AI Briefing</p>
-            <p className="text-sm leading-relaxed italic">{aiBriefings[burnoutScore]}</p>
+            <p className="text-sm leading-relaxed italic">{aiBriefing || aiBriefings[burnoutScore]}</p>
           </div>
           <button type="button" disabled={!beforeMood}
             onClick={() => setPhase("timer")}
