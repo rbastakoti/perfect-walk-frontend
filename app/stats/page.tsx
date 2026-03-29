@@ -24,6 +24,77 @@ function smoothPath(pts: [number, number][]): string {
 
 
 
+// ── Shimmer Skeletons ────────────────────────────────────────────────────────
+function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`shimmer ${className ?? ""}`} style={style} />;
+}
+
+function StatCardsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="pw-card flex flex-col gap-2">
+          <Shimmer className="h-8 w-16" />
+          <Shimmer className="h-3 w-20 mt-1" />
+          <Shimmer className="h-2.5 w-12" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MoodChartSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Shimmer className="w-full h-48" style={{ borderRadius: "0.75rem" }} />
+      <div className="flex justify-center gap-4">
+        <Shimmer className="h-3 w-24" />
+        <Shimmer className="h-3 w-24" />
+      </div>
+    </div>
+  );
+}
+
+function WalkingHistorySkeleton() {
+  return (
+    <div className="space-y-3">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="rounded-xl p-3 space-y-2" style={{ background: "var(--primary-dim)", border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shimmer className="h-3.5 w-28" />
+              <Shimmer className="h-3.5 w-14 rounded-full" />
+            </div>
+            <Shimmer className="h-3 w-16" />
+          </div>
+          <div className="flex gap-3">
+            <Shimmer className="h-2.5 w-12" />
+            <Shimmer className="h-2.5 w-16" />
+            <Shimmer className="h-2.5 w-14" />
+          </div>
+          <div className="flex items-center justify-between">
+            <Shimmer className="h-2.5 w-24" />
+            <Shimmer className="h-2.5 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsOverviewSkeleton() {
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {[80, 65, 75, 60, 70, 55].map((w, i) => (
+        <div key={i} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ background: "var(--primary-dim)" }}>
+          <Shimmer className="h-3 w-32" />
+          <Shimmer className={`h-3 w-${w > 70 ? 14 : 10}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Real Data Visualizations ────────────────────────────────────────────────
 function MoodTrendChart({ sessions }: { sessions: any[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
@@ -248,35 +319,41 @@ export default function StatsPage() {
 
   return (
     <section className="space-y-6 animate-fade-in-up">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {statCards.map(({ value, label, sub, color }) => {
-          const isActive = activeCard === label;
-          return (
-            <button key={label} type="button" onClick={() => setActiveCard(prev => prev === label ? null : label)}
-              className="pw-card flex flex-col text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-              style={{ border: isActive ? `1.5px solid ${color}` : undefined, boxShadow: isActive ? `0 0 0 3px ${color}18, var(--shadow)` : undefined }}>
-              <span className="text-3xl font-bold leading-none tabular-nums" style={{ color }}>{value}</span>
-              <span className="mt-2 text-xs font-bold">{label}</span>
-              <span className="mt-0.5 text-[10px]" style={{ color: "var(--fg-muted)" }}>{sub}</span>
-              {isActive && <span className="mt-2 text-[10px] font-semibold" style={{ color }}>Selected ✓</span>}
-            </button>
-          );
-        })}
-      </div>
+      {loadingStats ? (
+        <StatCardsSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {statCards.map(({ value, label, sub, color }) => {
+            const isActive = activeCard === label;
+            return (
+              <button key={label} type="button" onClick={() => setActiveCard(prev => prev === label ? null : label)}
+                className="pw-card flex flex-col text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ border: isActive ? `1.5px solid ${color}` : undefined, boxShadow: isActive ? `0 0 0 3px ${color}18, var(--shadow)` : undefined }}>
+                <span className="text-3xl font-bold leading-none tabular-nums" style={{ color }}>{value}</span>
+                <span className="mt-2 text-xs font-bold">{label}</span>
+                <span className="mt-0.5 text-[10px]" style={{ color: "var(--fg-muted)" }}>{sub}</span>
+                {isActive && <span className="mt-2 text-[10px] font-semibold" style={{ color }}>Selected ✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="grid gap-5 md:grid-cols-[3fr_2fr]">
-        {/* Real Mood Trend from API Data */}
+        {/* Mood Trend Chart */}
         <div className="pw-card-lg space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Your Walking Journey</p>
               <p className="text-base font-bold mt-0.5">Mood Changes Across Sessions</p>
             </div>
-            <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
-              {historyData?.sessions?.length || 0} sessions
-            </div>
+            {!loadingHistory && (
+              <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                {historyData?.sessions?.length || 0} sessions
+              </div>
+            )}
           </div>
-          <MoodTrendChart sessions={historyData?.sessions || []} />
+          {loadingHistory ? <MoodChartSkeleton /> : <MoodTrendChart sessions={historyData?.sessions || []} />}
         </div>
 
         {/* Walking Sessions History */}
@@ -285,11 +362,11 @@ export default function StatsPage() {
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Recent Activity</p>
             <p className="text-base font-bold mt-0.5">Walking Sessions History</p>
           </div>
-          <WalkingHistoryList sessions={historyData?.sessions || []} />
+          {loadingHistory ? <WalkingHistorySkeleton /> : <WalkingHistoryList sessions={historyData?.sessions || []} />}
         </div>
       </div>
 
-      {/* Stats Overview from Real API Data */}
+      {/* Stats Overview */}
       <div className="pw-card-lg space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -302,7 +379,7 @@ export default function StatsPage() {
             </div>
           )}
         </div>
-        <StatsOverview stats={statsData} />
+        {loadingStats ? <StatsOverviewSkeleton /> : <StatsOverview stats={statsData} />}
       </div>
 
       </section>

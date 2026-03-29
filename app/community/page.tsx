@@ -64,6 +64,73 @@ function HeartIcon({ filled }: { filled: boolean }) {
   );
 }
 
+// ── Shimmer Skeletons ────────────────────────────────────────────────────────
+function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`shimmer ${className ?? ""}`} style={style} />;
+}
+
+function PostCardSkeleton({ withWalk = false }: { withWalk?: boolean }) {
+  return (
+    <div className="flex flex-col rounded-2xl p-4"
+      style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2.5">
+          <Shimmer className="h-8 w-8 rounded-full shrink-0" />
+          <div className="space-y-1.5">
+            <Shimmer className="h-3 w-24" />
+            <Shimmer className="h-2.5 w-16" />
+          </div>
+        </div>
+        <Shimmer className="h-5 w-14 rounded-full" />
+      </div>
+      {/* Content */}
+      <div className="space-y-2">
+        <Shimmer className="h-3 w-full" />
+        <Shimmer className="h-3 w-5/6" />
+        <Shimmer className="h-3 w-3/4" />
+      </div>
+      {/* Feeling tags */}
+      <div className="flex gap-1.5 mt-2">
+        <Shimmer className="h-5 w-16 rounded-full" />
+        <Shimmer className="h-5 w-20 rounded-full" />
+      </div>
+      {/* Attached walk (optional) */}
+      {withWalk && (
+        <div className="mt-3 rounded-xl p-3 space-y-2"
+          style={{ background: "var(--primary-dim)", border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between">
+            <Shimmer className="h-3.5 w-32" />
+            <Shimmer className="h-5 w-14 rounded-full" />
+          </div>
+          <div className="flex justify-between gap-2">
+            {[12, 14, 16, 12, 14].map((w, i) => (
+              <Shimmer key={i} className={`h-2.5 w-${w}`} />
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+        <Shimmer className="h-7 w-16 rounded-full" />
+        <Shimmer className="h-2.5 w-20" />
+      </div>
+    </div>
+  );
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="flex flex-col gap-4">
+      <PostCardSkeleton withWalk />
+      <PostCardSkeleton />
+      <PostCardSkeleton withWalk />
+      <PostCardSkeleton />
+      <PostCardSkeleton />
+    </div>
+  );
+}
+
 function PostCard({ post, liked, onToggleLike }: { post: WallPost; liked: boolean; onToggleLike: (postId: string) => void }) {
   const [liking, setLiking] = useState(false);
 
@@ -347,10 +414,7 @@ export default function CommunityPage() {
       <div className="flex-1 min-w-0">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <p className="text-sm font-bold">{posts.length} posts</p>
-            {loading && (
-              <span className="text-xs" style={{ color: "var(--fg-muted)" }}>Loading...</span>
-            )}
+            <p className="text-sm font-bold">{loading ? "" : `${posts.length} posts`}</p>
           </div>
           <button onClick={loadFeed} disabled={loading}
             className="flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold transition-all hover:opacity-80 disabled:opacity-50"
@@ -386,17 +450,19 @@ export default function CommunityPage() {
         )}
         
         <div className="flex flex-col gap-4">
-          {posts.length === 0 && !loading ? (
+          {loading ? (
+            <FeedSkeleton />
+          ) : posts.length === 0 ? (
             <div className="text-center py-8" style={{ color: "var(--fg-muted)" }}>
               <p className="text-sm">No posts yet. Be the first to share something!</p>
             </div>
           ) : (
             posts.map(post => (
-              <PostCard 
-                key={post.postId} 
-                post={post} 
-                liked={likedPosts.has(post.postId)} 
-                onToggleLike={handleToggleLike} 
+              <PostCard
+                key={post.postId}
+                post={post}
+                liked={likedPosts.has(post.postId)}
+                onToggleLike={handleToggleLike}
               />
             ))
           )}
