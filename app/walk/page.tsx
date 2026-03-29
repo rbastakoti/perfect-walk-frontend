@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { aiBriefings, breathingMessages, quotes } from "@/lib/mock-data";
 import { BurnoutScore, WalkPhase } from "@/lib/types";
 import { AppCache } from "@/lib/app-cache";
-import { makeClientBackendCall } from "@/lib/backend-api";
+import { createClientBackendApi } from "@/lib/backend-api";
 
 interface Trail {
   id: string; name: string; distance: string; duration: number;
@@ -586,7 +586,7 @@ export default function WalkPage() {
             <p className="text-sm leading-relaxed italic">{aiBriefing || aiBriefings[burnoutScore]}</p>
           </div>
           <button type="button" disabled={!beforeMood}
-            onClick={() => setPhase("timer")}
+            onClick={() => { setPhase("timer"); setRunning(true); }}
             className="btn-primary w-full py-3.5 text-sm text-center disabled:opacity-40">
             Start Walk — {selectedTrail.name} →
           </button>
@@ -606,18 +606,6 @@ export default function WalkPage() {
 
         <Ring remaining={remaining} total={totalSeconds} />
 
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Steps",    val: steps.toLocaleString() },
-            { label: "Distance", val: `${miles} mi`             },
-            { label: "Calories", val: `${cal} kcal`          },
-          ].map(({ label, val }) => (
-            <div key={label} className="pw-card text-center">
-              <p className="text-lg font-bold tabular-nums">{val}</p>
-              <p className="text-[10px] mt-0.5" style={{ color: "var(--fg-muted)" }}>{label}</p>
-            </div>
-          ))}
-        </div>
 
         {running && (
           <div className="rounded-2xl px-5 py-4 text-center animate-fade-in"
@@ -701,22 +689,11 @@ export default function WalkPage() {
             try {
               setSaved(true); // Show saving state immediately
               
-              // Send to FastAPI backend
-              const result = await makeClientBackendCall(
-                '/api/walking-sessions/add',
-                session,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(walkData)
-                }
-              );
+              // Send to FastAPI backend using structured API
+              const api = createClientBackendApi(session);
+              const result = await api.walkingSessions.add(walkData);
 
-              if (!result.success) {
-                throw new Error(result.error || 'Failed to save walking session');
-              }
-
-              console.log('Walk session saved successfully:', walkData);
+              console.log('Walk session saved successfully:', result);
               setTimeout(() => router.push("/dashboard"), 1200);
             } catch (error) {
               console.error('Failed to save walk session:', error);

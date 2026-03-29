@@ -97,71 +97,100 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
   const { mode, toggleMode } = useTheme();
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("pw-sidebar-collapsed") === "1";
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem("pw-sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  };
 
   const isAuthenticated = status === "authenticated";
   const displayName = session?.user?.name ?? "You";
   const userAvatar = session?.user?.image;
-  const userEmail = session?.user?.email;
   const meta = PAGE_META[pathname] ?? { title: "Perfect Walk", sub: "" };
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
       {/* ── Sidebar (desktop) ── */}
-      <aside className="hidden md:flex w-56 shrink-0 flex-col"
-        style={{ background: "var(--sidebar)", borderRight: "1px solid var(--border)" }}>
+      <aside
+        className="hidden md:flex shrink-0 flex-col transition-all duration-200"
+        style={{
+          width: collapsed ? "60px" : "224px",
+          background: "var(--sidebar)",
+          borderRight: "1px solid var(--border)",
+          overflow: "hidden",
+        }}
+      >
         {/* Logo */}
-        <div className="flex h-14 shrink-0 items-center gap-2.5 px-5"
+        <div className="flex h-14 shrink-0 items-center px-3"
           style={{ borderBottom: "1px solid var(--border)" }}>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg text-base"
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base"
             style={{ background: "var(--primary-dim)" }}>🍃</div>
-          <span className="text-sm font-bold tracking-tight">Perfect Walk</span>
+          {!collapsed && (
+            <span className="ml-2.5 text-sm font-bold tracking-tight truncate">Perfect Walk</span>
+          )}
         </div>
 
         {/* Nav links */}
-        <nav className="flex flex-col gap-0.5 p-3 flex-1 overflow-y-auto">
-          <p className="px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest"
-            style={{ color: "var(--fg-muted)" }}>Navigation</p>
+        <nav className="flex flex-col gap-0.5 p-2 flex-1 overflow-y-auto">
+          {!collapsed && (
+            <p className="px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest"
+              style={{ color: "var(--fg-muted)" }}>Navigation</p>
+          )}
           {NAV.map(({ href, label, Icon }) => {
             const active = pathname === href;
             return (
-              <Link key={href} href={href}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all"
+              <Link key={href} href={href} title={collapsed ? label : undefined}
+                className="flex items-center rounded-xl transition-all"
                 style={{
+                  gap: collapsed ? 0 : "12px",
+                  padding: collapsed ? "10px 0" : "10px 12px",
+                  justifyContent: collapsed ? "center" : "flex-start",
                   color: active ? "var(--primary)" : "var(--fg-muted)",
                   background: active ? "var(--primary-dim)" : "transparent",
                 }}>
                 <Icon />
-                {label}
-                {active && (
-                  <div className="ml-auto h-1.5 w-1.5 rounded-full"
-                    style={{ background: "var(--primary)" }} />
+                {!collapsed && (
+                  <>
+                    <span className="text-sm font-semibold">{label}</span>
+                    {active && (
+                      <div className="ml-auto h-1.5 w-1.5 rounded-full"
+                        style={{ background: "var(--primary)" }} />
+                    )}
+                  </>
                 )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Sidebar footer */}
-        <div className="p-3" style={{ borderTop: "1px solid var(--border)" }}>
-          <Link href="/profile"
-            className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 transition-all hover:opacity-80"
-            style={{ background: pathname === "/profile" ? "var(--primary-dim)" : "transparent" }}>
-            <Avatar name={displayName} avatar={userAvatar} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{displayName}</p>
-              <p className="truncate text-[11px]" style={{ color: "var(--fg-muted)" }}>
-                {userEmail ?? "demo mode"}
-              </p>
-            </div>
-            {isAuthenticated && (
-              <button type="button" onClick={e => { e.preventDefault(); signOut({ callbackUrl: "/" }); }}
-                title="Sign out"
-                className="shrink-0 transition-opacity hover:opacity-70"
-                style={{ color: "var(--fg-muted)" }}>
-                <Icons.SignOut />
-              </button>
-            )}
-          </Link>
+        {/* Collapse / expand toggle — always at bottom */}
+        <div className="p-2" style={{ borderTop: "1px solid var(--border)" }}>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="flex h-9 w-full items-center rounded-xl transition-all hover:opacity-80"
+            style={{
+              justifyContent: collapsed ? "center" : "flex-start",
+              gap: "10px",
+              padding: collapsed ? "0" : "0 12px",
+              background: "var(--primary-dim)",
+              color: "var(--primary)",
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0 transition-transform duration-200"
+              style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)" }}>
+              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+            </svg>
+            {!collapsed && <span className="text-xs font-semibold">Collapse</span>}
+          </button>
         </div>
       </aside>
 

@@ -5,7 +5,7 @@
 import { auth } from "@/auth";
 
 // Backend API base URL
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL  ; 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL  || 'http://54.197.187.250:8000/' 
 
 /**
  * Make authenticated API call to backend with session validation
@@ -129,6 +129,62 @@ export const createClientBackendApi = (session: any) => ({
   
   logout: (): Promise<any> => 
     makeClientBackendCall('/api/auth/logout', session, { method: 'POST' }),
+
+  // Walking sessions endpoints
+  walkingSessions: {
+    getHistory: (): Promise<any> => 
+      makeClientBackendCall('/api/walking-sessions/history', session),
+    
+    getStats: (): Promise<any> => 
+      makeClientBackendCall('/api/walking-sessions/stats', session),
+    
+    add: (sessionData: any): Promise<any> => 
+      makeClientBackendCall('/api/walking-sessions/add', session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData)
+      }),
+  },
+
+  // TheWall endpoints
+  wall: {
+    getFeed: (limit = 20, offset = 0): Promise<any> => 
+      makeClientBackendCall(`/api/wall/feed?limit=${limit}&offset=${offset}`, session),
+    
+    getUserPosts: (userId: string, limit = 20): Promise<any> => 
+      makeClientBackendCall(`/api/wall/user/${userId}?limit=${limit}`, session),
+    
+    createPost: (postData: any): Promise<any> => 
+      makeClientBackendCall('/api/wall/post', session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postData)
+      }),
+    
+    toggleLike: (postId: string): Promise<any> => 
+      makeClientBackendCall(`/api/wall/${postId}/like`, session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: session.user?.id })
+      }),
+    
+    addComment: (postId: string, content: string): Promise<any> => 
+      makeClientBackendCall(`/api/wall/${postId}/comment`, session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: session.user?.id,
+          username: session.user?.name,
+          content
+        })
+      }),
+    
+    getPostDetails: (postId: string): Promise<any> => 
+      makeClientBackendCall(`/api/wall/${postId}`, session),
+    
+    getWalkingAchievements: (limit = 20): Promise<any> => 
+      makeClientBackendCall(`/api/wall/walks?limit=${limit}`, session),
+  },
 });
 
 /**
