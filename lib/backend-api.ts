@@ -5,7 +5,7 @@
 import { auth } from "@/auth";
 
 // Backend API base URL
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL  || 'http://54.197.187.250:8000/' 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 /**
  * Make authenticated API call to backend with session validation
