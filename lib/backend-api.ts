@@ -129,6 +129,22 @@ export const createClientBackendApi = (session: any) => ({
   
   logout: (): Promise<any> => 
     makeClientBackendCall('/api/auth/logout', session, { method: 'POST' }),
+
+  // Walking sessions endpoints
+  walkingSessions: {
+    getHistory: (): Promise<any> => 
+      makeClientBackendCall('/api/walking-sessions/history', session),
+    
+    getStats: (): Promise<any> => 
+      makeClientBackendCall('/api/walking-sessions/stats', session),
+    
+    add: (sessionData: any): Promise<any> => 
+      makeClientBackendCall('/api/walking-sessions/add', session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData)
+      }),
+  },
 });
 
 /**

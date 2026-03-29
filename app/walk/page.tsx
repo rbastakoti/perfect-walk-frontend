@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { aiBriefings, breathingMessages, quotes } from "@/lib/mock-data";
 import { BurnoutScore, WalkPhase } from "@/lib/types";
 import { AppCache } from "@/lib/app-cache";
-import { makeClientBackendCall } from "@/lib/backend-api";
+import { createClientBackendApi } from "@/lib/backend-api";
 
 interface Trail {
   id: string; name: string; distance: string; duration: number;
@@ -642,22 +642,11 @@ export default function WalkPage() {
             try {
               setSaved(true); // Show saving state immediately
               
-              // Send to FastAPI backend
-              const result = await makeClientBackendCall(
-                '/api/walking-sessions/add',
-                session,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(walkData)
-                }
-              );
+              // Send to FastAPI backend using structured API
+              const api = createClientBackendApi(session);
+              const result = await api.walkingSessions.add(walkData);
 
-              if (!result.success) {
-                throw new Error(result.error || 'Failed to save walking session');
-              }
-
-              console.log('Walk session saved successfully:', walkData);
+              console.log('Walk session saved successfully:', result);
               setTimeout(() => router.push("/dashboard"), 1200);
             } catch (error) {
               console.error('Failed to save walk session:', error);
