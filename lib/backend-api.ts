@@ -145,6 +145,46 @@ export const createClientBackendApi = (session: any) => ({
         body: JSON.stringify(sessionData)
       }),
   },
+
+  // TheWall endpoints
+  wall: {
+    getFeed: (limit = 20, offset = 0): Promise<any> => 
+      makeClientBackendCall(`/api/wall/feed?limit=${limit}&offset=${offset}`, session),
+    
+    getUserPosts: (userId: string, limit = 20): Promise<any> => 
+      makeClientBackendCall(`/api/wall/user/${userId}?limit=${limit}`, session),
+    
+    createPost: (postData: any): Promise<any> => 
+      makeClientBackendCall('/api/wall/post', session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(postData)
+      }),
+    
+    toggleLike: (postId: string): Promise<any> => 
+      makeClientBackendCall(`/api/wall/${postId}/like`, session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: session.user?.id })
+      }),
+    
+    addComment: (postId: string, content: string): Promise<any> => 
+      makeClientBackendCall(`/api/wall/${postId}/comment`, session, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: session.user?.id,
+          username: session.user?.name,
+          content
+        })
+      }),
+    
+    getPostDetails: (postId: string): Promise<any> => 
+      makeClientBackendCall(`/api/wall/${postId}`, session),
+    
+    getWalkingAchievements: (limit = 20): Promise<any> => 
+      makeClientBackendCall(`/api/wall/walks?limit=${limit}`, session),
+  },
 });
 
 /**
