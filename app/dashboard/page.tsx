@@ -343,60 +343,110 @@ export default function DashboardPage() {
       </div>
 
       {/* Weather */}
-      <div className="rounded-2xl p-5 md:p-6"
+      <div className="rounded-2xl overflow-hidden"
         style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">🌤</span>
-          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Current Weather</p>
+
+        {/* Header row */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">🌤</span>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--fg-muted)" }}>Current Weather</p>
+          </div>
+          {weather && !weatherLoading && weather.name && (
+            <p className="text-[11px] font-medium" style={{ color: "var(--fg-muted)" }}>
+              📍 {weather.name}
+            </p>
+          )}
         </div>
 
         {weatherLoading && (
-          <div className="flex items-center gap-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-            <div className="h-4 w-4 rounded-full animate-pulse-dot" style={{ background: "var(--primary)" }} />
-            Fetching your local weather…
+          <div className="px-5 pb-5 space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl animate-pulse" style={{ background: "var(--primary-dim)" }} />
+              <div className="space-y-2 flex-1">
+                <div className="h-8 w-28 rounded-lg animate-pulse" style={{ background: "var(--primary-dim)" }} />
+                <div className="h-3 w-36 rounded-md animate-pulse" style={{ background: "var(--primary-dim)" }} />
+              </div>
+              <div className="h-7 w-24 rounded-full animate-pulse shrink-0" style={{ background: "var(--primary-dim)" }} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[1,2,3].map(i => (
+                <div key={i} className="h-16 rounded-xl animate-pulse" style={{ background: "var(--primary-dim)" }} />
+              ))}
+            </div>
           </div>
         )}
 
         {!weatherLoading && !weather && (
-          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+          <p className="px-5 pb-5 text-sm" style={{ color: "var(--fg-muted)" }}>
             Enable location access to see live weather conditions.
           </p>
         )}
 
         {weather && !weatherLoading && (() => {
-          const main    = weather.weather?.[0]?.main ?? "";
-          const desc    = weather.weather?.[0]?.description ?? "";
-          const temp    = Math.round(weather.main?.temp ?? 0);
-          const feels   = Math.round(weather.main?.feels_like ?? 0);
+          const main     = weather.weather?.[0]?.main ?? "";
+          const desc     = weather.weather?.[0]?.description ?? "";
+          const temp     = Math.round(weather.main?.temp ?? 0);
+          const feels    = Math.round(weather.main?.feels_like ?? 0);
           const humidity = weather.main?.humidity ?? 0;
-          const wind    = Math.round((weather.wind?.speed ?? 0) * 2.237);
-          const city    = weather.name ?? "";
-          const good    = isGoodWalkWeather(main, temp);
+          const wind     = Math.round((weather.wind?.speed ?? 0) * 2.237);
+          const good     = isGoodWalkWeather(main, temp);
+          const feelsDiff = feels - temp;
+          const feelsTip  = feelsDiff > 1 ? "feels warmer" : feelsDiff < -1 ? "feels cooler" : "feels accurate";
+
+          // Subtle atmospheric tint per condition
+          const tints: Record<string, string> = {
+            Clear:        "linear-gradient(135deg,#FFFBEB 0%,#FEF3C7 100%)",
+            Clouds:       "linear-gradient(135deg,#F8FAFC 0%,#E2E8F0 100%)",
+            Rain:         "linear-gradient(135deg,#EFF6FF 0%,#DBEAFE 100%)",
+            Drizzle:      "linear-gradient(135deg,#F0F9FF 0%,#E0F2FE 100%)",
+            Thunderstorm: "linear-gradient(135deg,#F5F3FF 0%,#EDE9FE 100%)",
+            Snow:         "linear-gradient(135deg,#F0F9FF 0%,#ECFEFF 100%)",
+            Mist:         "linear-gradient(135deg,#F9FAFB 0%,#F3F4F6 100%)",
+            Fog:          "linear-gradient(135deg,#F9FAFB 0%,#F3F4F6 100%)",
+            Haze:         "linear-gradient(135deg,#FFFBEB 0%,#FEF9C3 100%)",
+          };
+          const weatherBg = tints[main] ?? "linear-gradient(135deg,#F8FAFC 0%,#F1F5F9 100%)";
+
           return (
-            <div className="space-y-4">
-              <div className="flex items-end gap-4">
-                <span className="text-5xl leading-none">{weatherEmoji(main)}</span>
-                <div>
-                  <p className="text-3xl font-bold">{temp}°C</p>
-                  <p className="text-sm capitalize" style={{ color: "var(--fg-muted)" }}>{desc}</p>
-                  {city && <p className="text-xs mt-0.5" style={{ color: "var(--fg-muted)" }}>{city}</p>}
-                </div>
-                <div className="ml-auto shrink-0">
-                  <span className="rounded-full px-3 py-1 text-xs font-bold"
-                    style={{ background: good ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.1)", color: good ? "#22c55e" : "#ef4444" }}>
-                    {good ? "Good walk weather" : "Stay inside"}
-                  </span>
+            <div className="px-5 pb-5 space-y-3">
+              {/* Atmospheric hero block */}
+              <div className="rounded-xl px-4 py-4" style={{ background: weatherBg }}>
+                <div className="flex items-center gap-4">
+                  <span className="text-[3.5rem] leading-none select-none">{weatherEmoji(main)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-4xl font-bold tracking-tight" style={{ color: "#1E293B" }}>{temp}°C</span>
+                      <span className="text-xs font-medium" style={{ color: "#94A3B8" }}>{feelsTip} · {feels}°C</span>
+                    </div>
+                    <p className="text-sm capitalize font-medium mt-0.5 truncate" style={{ color: "#475569" }}>{desc}</p>
+                  </div>
+                  {/* Walk readiness pill */}
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <span className="rounded-full px-3 py-1.5 text-[11px] font-bold flex items-center gap-1"
+                      style={{
+                        background: good ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.1)",
+                        color:      good ? "#15803d"              : "#dc2626",
+                      }}>
+                      <span>{good ? "✓" : "✗"}</span>
+                      <span>{good ? "Walk-ready" : "Stay inside"}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "Feels like", val: `${feels}°C`    },
-                  { label: "Humidity",   val: `${humidity}%`   },
-                  { label: "Wind",       val: `${wind} mph`    },
-                ].map(({ label, val }) => (
-                  <div key={label} className="rounded-xl px-3 py-2.5 text-center" style={{ background: "var(--primary-dim)" }}>
-                    <p className="text-xs" style={{ color: "var(--fg-muted)" }}>{label}</p>
-                    <p className="text-sm font-bold mt-0.5">{val}</p>
+                  { icon: "💧", label: "Humidity",   val: `${humidity}%`  },
+                  { icon: "💨", label: "Wind",        val: `${wind} mph`   },
+                  { icon: "🌡️", label: "Feels like",  val: `${feels}°C`   },
+                ].map(({ icon, label, val }) => (
+                  <div key={label} className="rounded-xl px-2 py-3 flex flex-col items-center gap-1"
+                    style={{ background: "var(--primary-dim)" }}>
+                    <span className="text-base leading-none">{icon}</span>
+                    <p className="text-[10px]" style={{ color: "var(--fg-muted)" }}>{label}</p>
+                    <p className="text-sm font-bold leading-none">{val}</p>
                   </div>
                 ))}
               </div>
