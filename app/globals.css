@@ -123,6 +123,12 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(99,103,255,
   .animate-slide-up   { animation: slide-up    0.45s ease-out both; }
   .animate-me-too-pop { animation: me-too-pop  0.35s ease-out both; }
   .animate-post-in    { animation: post-in     0.38s ease-out both; }
+  .shimmer {
+    background: linear-gradient(90deg, var(--primary-dim) 25%, rgba(99,103,255,0.2) 50%, var(--primary-dim) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
 
   .pw-card {
     background: var(--card);

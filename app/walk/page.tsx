@@ -535,7 +535,7 @@ export default function WalkPage() {
             <p className="text-sm leading-relaxed italic">{aiBriefing || aiBriefings[burnoutScore]}</p>
           </div>
           <button type="button" disabled={!beforeMood}
-            onClick={() => setPhase("timer")}
+            onClick={() => { setPhase("timer"); setRunning(true); }}
             className="btn-primary w-full py-3.5 text-sm text-center disabled:opacity-40">
             Start Walk — {selectedTrail.name} →
           </button>
@@ -555,18 +555,6 @@ export default function WalkPage() {
 
         <Ring remaining={remaining} total={totalSeconds} />
 
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Steps",    val: steps.toLocaleString() },
-            { label: "Distance", val: `${miles} mi`             },
-            { label: "Calories", val: `${cal} kcal`          },
-          ].map(({ label, val }) => (
-            <div key={label} className="pw-card text-center">
-              <p className="text-lg font-bold tabular-nums">{val}</p>
-              <p className="text-[10px] mt-0.5" style={{ color: "var(--fg-muted)" }}>{label}</p>
-            </div>
-          ))}
-        </div>
 
         {running && (
           <div className="rounded-2xl px-5 py-4 text-center animate-fade-in"
