@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useState } from "react";
-import { burnoutTrend, thirtyDayMood, weeklyWalkCounts } from "@/lib/mock-data";
-
-type Range = 7 | 14 | 30;
+import { useSession } from "next-auth/react";
+import { createClientBackendApi } from "@/lib/backend-api";
+import { useBackendApi } from "@/lib/backend-hooks";
 
 function smoothPath(pts: [number, number][]): string {
   if (pts.length < 2) return "";
@@ -99,34 +98,43 @@ function StatsOverviewSkeleton() {
 // ── Real Data Visualizations ────────────────────────────────────────────────
 function MoodTrendChart({ sessions }: { sessions: any[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
-  const data = thirtyDayMood.slice(-range);
+  
+  if (!sessions || sessions.length === 0) {
+    return (
+      <div className="text-center py-8 text-sm" style={{ color: "var(--fg-muted)" }}>
+        No walking sessions data available
+      </div>
+    );
+  }
+
   const W = 680, H = 200;
   const pad = { l: 32, r: 16, t: 24, b: 28 };
-  const pw  = W - pad.l - pad.r;
-  const ph  = H - pad.t - pad.b;
-  const n   = data.length;
+  const pw = W - pad.l - pad.r;
+  const ph = H - pad.t - pad.b;
+  const n = sessions.length;
   const xPos = (i: number) => pad.l + (i / Math.max(n - 1, 1)) * pw;
   const yPos = (v: number) => pad.t + (1 - (v - 1) / 4) * ph;
   const baseY = yPos(1);
-  const beforePts = data.map((p, i) => [xPos(i), yPos(p.before)] as [number, number]);
-  const afterPts  = data.map((p, i) => [xPos(i), yPos(p.after)]  as [number, number]);
+  
+  const beforePts = sessions.map((s, i) => [xPos(i), yPos(s.moodBefore)] as [number, number]);
+  const afterPts = sessions.map((s, i) => [xPos(i), yPos(s.moodAfter)] as [number, number]);
   const beforeD = smoothPath(beforePts);
-  const afterD  = smoothPath(afterPts);
+  const afterD = smoothPath(afterPts);
   const beforeArea = `${beforeD} L ${xPos(n - 1)},${baseY} L ${pad.l},${baseY} Z`;
-  const afterArea  = `${afterD}  L ${xPos(n - 1)},${baseY} L ${pad.l},${baseY} Z`;
-  const stride = Math.max(1, Math.floor(n / 5));
-  const hovP = hovered !== null ? data[hovered] : null;
+  const afterArea = `${afterD} L ${xPos(n - 1)},${baseY} L ${pad.l},${baseY} Z`;
+  
+  const hovP = hovered !== null ? sessions[hovered] : null;
 
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ cursor: "crosshair" }}>
         <defs>
-          <linearGradient id="gradBefore" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#6367FF" stopOpacity="0.25" />
+          <linearGradient id="gradBeforeReal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6367FF" stopOpacity="0.25" />
             <stop offset="100%" stopColor="#6367FF" stopOpacity="0.02" />
           </linearGradient>
-          <linearGradient id="gradAfter" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#C9BEFF" stopOpacity="0.35" />
+          <linearGradient id="gradAfterReal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#C9BEFF" stopOpacity="0.35" />
             <stop offset="100%" stopColor="#C9BEFF" stopOpacity="0.02" />
           </linearGradient>
         </defs>
@@ -139,23 +147,24 @@ function MoodTrendChart({ sessions }: { sessions: any[] }) {
               fill="var(--fg-muted)" fontFamily="var(--font-body)">{v}</text>
           </g>
         ))}
-        {showAfter  && <path d={afterArea}  fill="url(#gradAfter)"  />}
-        {showBefore && <path d={beforeArea} fill="url(#gradBefore)" />}
-        {showAfter  && <path d={afterD}  fill="none" stroke="#C9BEFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-        {showBefore && <path d={beforeD} fill="none" stroke="#6367FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
-        {data.map((p, i) => {
-          const x  = xPos(i);
-          const yB = yPos(p.before);
-          const yA = yPos(p.after);
-          const isLabel = i % stride === 0 || i === n - 1;
-          const isHov   = hovered === i;
+        <path d={afterArea} fill="url(#gradAfterReal)" />
+        <path d={beforeArea} fill="url(#gradBeforeReal)" />
+        <path d={afterD} fill="none" stroke="#C9BEFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={beforeD} fill="none" stroke="#6367FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {sessions.map((s, i) => {
+          const x = xPos(i);
+          const yB = yPos(s.moodBefore);
+          const yA = yPos(s.moodAfter);
+          const isHov = hovered === i;
           return (
             <g key={i}>
-              {isLabel && (
+              {(i % Math.max(1, Math.floor(n / 5)) === 0 || i === n - 1) && (
                 <>
-                  {showBefore && <><circle cx={x} cy={yB} r="3.5" fill="#6367FF" /><text x={x} y={yB - 7} textAnchor="middle" fontSize="10" fontWeight="700" fill="#6367FF" fontFamily="var(--font-body)">{p.before}</text></>}
-                  {showAfter  && <><circle cx={x} cy={yA} r="3.5" fill="#C9BEFF" /><text x={x} y={yA - 7} textAnchor="middle" fontSize="10" fontWeight="700" fill="#C9BEFF" fontFamily="var(--font-body)">{p.after}</text></>}
-                  <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--fg-muted)" fontFamily="var(--font-body)">{p.day.replace(/\D+/, "")}</text>
+                  <circle cx={x} cy={yB} r="3.5" fill="#6367FF" />
+                  <text x={x} y={yB - 7} textAnchor="middle" fontSize="10" fontWeight="700" fill="#6367FF" fontFamily="var(--font-body)">{s.moodBefore}</text>
+                  <circle cx={x} cy={yA} r="3.5" fill="#C9BEFF" />
+                  <text x={x} y={yA - 7} textAnchor="middle" fontSize="10" fontWeight="700" fill="#C9BEFF" fontFamily="var(--font-body)">{s.moodAfter}</text>
+                  <text x={x} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--fg-muted)" fontFamily="var(--font-body)">{i + 1}</text>
                 </>
               )}
               <rect x={x - (pw / n) / 2} y={pad.t} width={pw / n} height={ph} fill="transparent" style={{ cursor: "crosshair" }}
@@ -163,8 +172,10 @@ function MoodTrendChart({ sessions }: { sessions: any[] }) {
               {isHov && (
                 <g>
                   <line x1={x} y1={pad.t} x2={x} y2={baseY} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 3" />
-                  {showBefore && <><circle cx={x} cy={yB} r="5" fill="#6367FF" opacity="0.9" /><circle cx={x} cy={yB} r="9" fill="#6367FF" opacity="0.15" /></>}
-                  {showAfter  && <><circle cx={x} cy={yA} r="5" fill="#C9BEFF" opacity="0.9" /><circle cx={x} cy={yA} r="9" fill="#C9BEFF" opacity="0.15" /></>}
+                  <circle cx={x} cy={yB} r="5" fill="#6367FF" opacity="0.9" />
+                  <circle cx={x} cy={yB} r="9" fill="#6367FF" opacity="0.15" />
+                  <circle cx={x} cy={yA} r="5" fill="#C9BEFF" opacity="0.9" />
+                  <circle cx={x} cy={yA} r="9" fill="#C9BEFF" opacity="0.15" />
                 </g>
               )}
             </g>
@@ -174,37 +185,27 @@ function MoodTrendChart({ sessions }: { sessions: any[] }) {
       <div className="h-8 flex items-center justify-center gap-6 text-xs" style={{ color: "var(--fg-muted)" }}>
         {hovP ? (
           <>
-            <span className="font-semibold" style={{ color: "var(--fg)" }}>{hovP.day}</span>
-            {showBefore && <span>Before: <b style={{ color: "#6367FF" }}>{hovP.before}</b></span>}
-            {showAfter  && <span>After: <b style={{ color: "#C9BEFF" }}>{hovP.after}</b></span>}
-            {showBefore && showAfter && <span>Lift: <b style={{ color: "#22c55e" }}>+{(hovP.after - hovP.before).toFixed(1)}</b></span>}
+            <span className="font-semibold" style={{ color: "var(--fg)" }}>{hovP.trailName}</span>
+            <span>Before: <b style={{ color: "#6367FF" }}>{hovP.moodBefore}</b></span>
+            <span>After: <b style={{ color: "#C9BEFF" }}>{hovP.moodAfter}</b></span>
+            <span>Lift: <b style={{ color: "#22c55e" }}>+{hovP.moodImprovement}</b></span>
           </>
-        ) : <span>Hover over the chart to inspect values</span>}
-      </div>
-      <div className="mt-1 flex justify-center gap-4">
-        <button type="button" onClick={onToggleBefore}
-          className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:opacity-80"
-          style={{ background: showBefore ? "rgba(99,103,255,0.12)" : "var(--primary-dim)", color: showBefore ? "#6367FF" : "var(--fg-muted)", border: `1px solid ${showBefore ? "rgba(99,103,255,0.3)" : "var(--border)"}`, opacity: showBefore ? 1 : 0.5 }}>
-          <span className="inline-block h-0.5 w-5 rounded-full" style={{ background: "#6367FF" }} />Before walk
-        </button>
-        <button type="button" onClick={onToggleAfter}
-          className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold transition-all hover:opacity-80"
-          style={{ background: showAfter ? "rgba(201,190,255,0.15)" : "var(--primary-dim)", color: showAfter ? "#8b7fd4" : "var(--fg-muted)", border: `1px solid ${showAfter ? "rgba(201,190,255,0.4)" : "var(--border)"}`, opacity: showAfter ? 1 : 0.5 }}>
-          <span className="inline-block h-0.5 w-5 rounded-full" style={{ background: "#C9BEFF" }} />After walk
-        </button>
+        ) : <span>Hover over the chart to inspect walking sessions</span>}
       </div>
     </div>
   );
 }
 
-function WeeklyBarChart({ activeWeek, onSelect }: { activeWeek: number | null; onSelect: (i: number) => void }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-  const maxCount = Math.max(...weeklyWalkCounts.map(w => w.count));
-  const W = 340, H = 160, barW = 54, gap = 28;
-  const total  = weeklyWalkCounts.length * barW + (weeklyWalkCounts.length - 1) * gap;
-  const startX = (W - total) / 2;
-  const maxH   = 96;
-  const baseY  = H - 30;
+function WalkingHistoryList({ sessions }: { sessions: any[] }) {
+  if (!sessions || sessions.length === 0) {
+    return (
+      <div className="text-center py-8 text-sm" style={{ color: "var(--fg-muted)" }}>
+        No walking sessions found
+      </div>
+    );
+  }
+
+  const sortedSessions = [...sessions].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   return (
     <div className="space-y-3 max-h-80 overflow-y-auto">
@@ -251,33 +252,19 @@ function WeeklyBarChart({ activeWeek, onSelect }: { activeWeek: number | null; o
           </div>
         );
       })}
-    </svg>
+    </div>
   );
 }
 
-function BurnoutSparkline() {
-  const [hovered, setHovered] = useState<number | null>(null);
-  const W = 680, H = 110;
-  const pad = { l: 16, r: 16, t: 20, b: 16 };
-  const pw  = W - pad.l - pad.r;
-  const ph  = H - pad.t - pad.b;
-  const n   = burnoutTrend.length;
-  const xPos = (i: number) => pad.l + (i / (n - 1)) * pw;
-  const yPos = (v: number) => pad.t + (1 - (v - 1) / 4) * ph;
-  const baseY = yPos(1);
-  const pts   = burnoutTrend.map((p, i) => [xPos(i), yPos(p.score)] as [number, number]);
-  const lineD = smoothPath(pts);
-  const areaD = `${lineD} L ${xPos(n - 1)},${baseY} L ${pad.l},${baseY} Z`;
-  const hovP = hovered !== null ? burnoutTrend[hovered] : null;
-
-  // If totalCalories is not provided, estimate from sessions
-  let totalCalories = stats.totalCalories;
-  if (typeof totalCalories !== "number" && Array.isArray(stats.sessions)) {
-    totalCalories = stats.sessions.reduce(
-      (sum: number, s: any) => sum + (s.estimatedCalories ?? estimateCalories(s.distance)),
-      0
+function StatsOverview({ stats }: { stats: any }) {
+  if (!stats) {
+    return (
+      <div className="text-center py-8 text-sm" style={{ color: "var(--fg-muted)" }}>
+        No statistics data available
+      </div>
     );
   }
+
   return (
     <div className="grid gap-2 md:grid-cols-2">
       {[
@@ -299,10 +286,7 @@ function BurnoutSparkline() {
 }
 
 export default function StatsPage() {
-  const [range, setRange]           = useState<Range>(30);
-  const [showBefore, setShowBefore] = useState(true);
-  const [showAfter, setShowAfter]   = useState(true);
-  const [activeWeek, setActiveWeek] = useState<number | null>(null);
+  const { data: session } = useSession();
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
   // Use backend hooks for walking sessions data
@@ -333,8 +317,6 @@ export default function StatsPage() {
     { value: statsData?.averageMoodImprovement ? `+${statsData.averageMoodImprovement.toFixed(1)}` : "+0", label: "Avg mood lift", sub: "per session", color: "#C9BEFF" },
   ];
 
-  const selectedWeek = activeWeek !== null ? weeklyWalkCounts[activeWeek] : null;
-
   return (
     <section className="space-y-6 animate-fade-in-up">
       {loadingStats ? (
@@ -358,11 +340,12 @@ export default function StatsPage() {
       )}
 
       <div className="grid gap-5 md:grid-cols-[3fr_2fr]">
+        {/* Mood Trend Chart */}
         <div className="pw-card-lg space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Mood Trend</p>
-              <p className="text-base font-bold mt-0.5">Before vs. After Walk</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Your Walking Journey</p>
+              <p className="text-base font-bold mt-0.5">Mood Changes Across Sessions</p>
             </div>
             {!loadingHistory && (
               <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
@@ -373,31 +356,32 @@ export default function StatsPage() {
           {loadingHistory ? <MoodChartSkeleton /> : <MoodTrendChart sessions={historyData?.sessions || []} />}
         </div>
 
+        {/* Walking Sessions History */}
         <div className="pw-card-lg space-y-2">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Weekly Activity</p>
-            <p className="text-base font-bold mt-0.5">
-              {selectedWeek ? `${selectedWeek.week} — ${selectedWeek.count} walks` : "Walks per week"}
-            </p>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Recent Activity</p>
+            <p className="text-base font-bold mt-0.5">Walking Sessions History</p>
           </div>
           {loadingHistory ? <WalkingHistorySkeleton /> : <WalkingHistoryList sessions={historyData?.sessions || []} />}
         </div>
       </div>
 
+      {/* Stats Overview */}
       <div className="pw-card-lg space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Burnout Trend</p>
-            <p className="text-base font-bold mt-0.5">30-day burnout score</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Your Progress</p>
+            <p className="text-base font-bold mt-0.5">Walking Statistics Overview</p>
           </div>
           {statsData && (
             <div className="text-xs px-3 py-1 rounded-full" style={{ background: "rgba(34,197,94,0.12)", color: "#16a34a" }}>
               {statsData.favoriteDifficulty} preferred difficulty
             </div>
-          ))}
+          )}
         </div>
         {loadingStats ? <StatsOverviewSkeleton /> : <StatsOverview stats={statsData} />}
       </div>
-    </section>
+
+      </section>
   );
 }
