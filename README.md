@@ -368,7 +368,20 @@ npm run build
 
 ---
 
-## 📜 **License**
+## � **Team**
+
+### **Backend, AI & Integration Team**
+- **Rajan Bastakoti** - Backend Architecture & AI Integration
+- **Manash Lamichhane** - API Development & Data Systems
+- **Dhiraj Majhi** - Integration & Infrastructure
+
+### **Frontend Team** 
+- **Nishu Shrestha** - Frontend Development & UI/UX
+- **Prasamsha Singh Thakuri** - Frontend Development & User Experience
+
+---
+
+## �📜 **License**
 
 This project is created for the **Nepal-US Hackathon 2026** and is available for educational and development purposes.
 
