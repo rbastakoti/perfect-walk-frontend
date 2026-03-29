@@ -88,6 +88,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       (session as any).accessToken = token.accessToken;
       (session as any).error = token.error;
+      // Add user ID to session for database partitioning
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
+      }
       return session;
     },
     authorized({ auth }) {

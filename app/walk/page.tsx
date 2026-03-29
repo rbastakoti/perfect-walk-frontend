@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { aiBriefings, breathingMessages, quotes } from "@/lib/mock-data";
 import { BurnoutScore, WalkPhase } from "@/lib/types";
 import { AppCache } from "@/lib/app-cache";
+import { createClientBackendApi } from "@/lib/backend-api";
 
 interface Trail {
   id: string; name: string; distance: string; duration: number;
@@ -287,6 +289,7 @@ function Ring({ remaining, total }: { remaining: number; total: number }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function WalkPage() {
   const router = useRouter();
+  const { data: session } = useSession();
 
   const [trails, setTrails]           = useState<Trail[]>(FALLBACK_TRAILS);
   const [loadingParks, setLoadingParks] = useState(true);
@@ -380,6 +383,54 @@ export default function WalkPage() {
   const handleSelectTrail = (trail: Trail) => {
     setSelected(trail);
     setRemaining(trail.duration * 60);
+  };
+
+  // Capture complete walking session data including user info
+  // afterMoodValue is passed explicitly to avoid stale closure capture
+  const captureWalkingSession = (afterMoodValue: number | null) => {
+    const elapsed = totalSeconds - remaining;
+    const steps = Math.round(elapsed * 1.4);
+    const miles = (steps * 0.000435).toFixed(2);
+    const cal = Math.round(elapsed * 0.08);
+
+    const sessionData = {
+      // User identification for partitioning
+      userId: session?.user?.id || null,
+
+      // Session identification & timing
+      sessionId: crypto.randomUUID(),
+      startTime: new Date(Date.now() - elapsed * 1000),
+      endTime: new Date(),
+      plannedDuration: selectedTrail.duration,
+      actualDuration: Math.round(elapsed / 60),
+      completed: remaining === 0,
+
+      // Trail/Location information
+      trailId: selectedTrail.id,
+      trailName: selectedTrail.name,
+      trailType: trails === FALLBACK_TRAILS ? "fallback" : "real_park",
+      distance: selectedTrail.distance,
+      difficulty: selectedTrail.difficulty,
+      locationUsed: locationStatus === "granted",
+
+      // Activity metrics
+      estimatedSteps: steps,
+      estimatedDistance: parseFloat(miles),
+      estimatedCalories: cal,
+
+      // Wellness/mood tracking — use passed value, not closure
+      moodBefore: beforeMood,
+      moodAfter: afterMoodValue,
+      moodImprovement: afterMoodValue && beforeMood ? afterMoodValue - beforeMood : 0,
+      burnoutScoreAtTime: burnoutScore,
+
+      // Session metadata
+      quoteSeen: quoteRef.current,
+      completionMethod: remaining === 0 ? "timer_finished" : "manual_done",
+      timestamp: new Date().toISOString(),
+    };
+
+    return sessionData;
   };
 
   const burnoutScore = useMemo<BurnoutScore>(() => {
@@ -579,9 +630,33 @@ export default function WalkPage() {
 
       <div className="flex gap-3">
         <button type="button" disabled={!afterMood}
-          onClick={() => { setSaved(true); setTimeout(() => router.push("/dashboard"), 1200); }}
+          onClick={async () => {
+            if (!session?.user) {
+              console.warn('No user session found');
+              setSaved(true);
+              setTimeout(() => router.push("/dashboard"), 1200);
+              return;
+            }
+
+            const walkData = captureWalkingSession(afterMood);
+            
+            try {
+              setSaved(true); // Show saving state immediately
+              
+              // Send to FastAPI backend using structured API
+              const api = createClientBackendApi(session);
+              const result = await api.walkingSessions.add(walkData);
+
+              console.log('Walk session saved successfully:', result);
+              setTimeout(() => router.push("/dashboard"), 1200);
+            } catch (error) {
+              console.error('Failed to save walk session:', error);
+              // TODO: Show error message to user, but still navigate
+              setTimeout(() => router.push("/dashboard"), 1200);
+            }
+          }}
           className="flex-1 btn-primary py-3.5 text-sm text-center disabled:opacity-40">
-          {saved ? "Saved ✓" : "Save & Finish"}
+          {saved ? "Saving... ✓" : "Save & Finish"}
         </button>
         <button type="button" onClick={() => { setPhase("trail"); setRemaining(selectedTrail.duration * 60); setRunning(false); setBeforeMood(null); setAfterMood(null); }}
           className="rounded-2xl px-5 py-3.5 text-sm font-semibold transition hover:opacity-80"
