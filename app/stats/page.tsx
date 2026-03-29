@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -22,9 +23,81 @@ function smoothPath(pts: [number, number][]): string {
   return d;
 }
 
-function MoodLineChart({ range, showBefore, onToggleBefore, showAfter, onToggleAfter }: {
-  range: Range; showBefore: boolean; onToggleBefore: () => void; showAfter: boolean; onToggleAfter: () => void;
-}) {
+
+
+// ── Shimmer Skeletons ────────────────────────────────────────────────────────
+function Shimmer({ className, style }: { className?: string; style?: React.CSSProperties }) {
+  return <div className={`shimmer ${className ?? ""}`} style={style} />;
+}
+
+function StatCardsSkeleton() {
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="pw-card flex flex-col gap-2">
+          <Shimmer className="h-8 w-16" />
+          <Shimmer className="h-3 w-20 mt-1" />
+          <Shimmer className="h-2.5 w-12" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MoodChartSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Shimmer className="w-full h-48" style={{ borderRadius: "0.75rem" }} />
+      <div className="flex justify-center gap-4">
+        <Shimmer className="h-3 w-24" />
+        <Shimmer className="h-3 w-24" />
+      </div>
+    </div>
+  );
+}
+
+function WalkingHistorySkeleton() {
+  return (
+    <div className="space-y-3">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className="rounded-xl p-3 space-y-2" style={{ background: "var(--primary-dim)", border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shimmer className="h-3.5 w-28" />
+              <Shimmer className="h-3.5 w-14 rounded-full" />
+            </div>
+            <Shimmer className="h-3 w-16" />
+          </div>
+          <div className="flex gap-3">
+            <Shimmer className="h-2.5 w-12" />
+            <Shimmer className="h-2.5 w-16" />
+            <Shimmer className="h-2.5 w-14" />
+          </div>
+          <div className="flex items-center justify-between">
+            <Shimmer className="h-2.5 w-24" />
+            <Shimmer className="h-2.5 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsOverviewSkeleton() {
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {[80, 65, 75, 60, 70, 55].map((w, i) => (
+        <div key={i} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ background: "var(--primary-dim)" }}>
+          <Shimmer className="h-3 w-32" />
+          <Shimmer className={`h-3 w-${w > 70 ? 14 : 10}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Real Data Visualizations ────────────────────────────────────────────────
+function MoodTrendChart({ sessions }: { sessions: any[] }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const data = thirtyDayMood.slice(-range);
   const W = 680, H = 200;
@@ -134,37 +207,48 @@ function WeeklyBarChart({ activeWeek, onSelect }: { activeWeek: number | null; o
   const baseY  = H - 30;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      <defs>
-        <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6367FF" stopOpacity="1" /><stop offset="100%" stopColor="#8494FF" stopOpacity="0.7" />
-        </linearGradient>
-        <linearGradient id="barGradDim" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#8494FF" stopOpacity="0.4" /><stop offset="100%" stopColor="#C9BEFF" stopOpacity="0.2" />
-        </linearGradient>
-        <linearGradient id="barGradActive" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#C9BEFF" stopOpacity="1" /><stop offset="100%" stopColor="#8494FF" stopOpacity="0.8" />
-        </linearGradient>
-      </defs>
-      <line x1={startX - 4} y1={baseY} x2={startX + total + 4} y2={baseY} stroke="var(--border)" strokeWidth="1" />
-      {weeklyWalkCounts.map((w, i) => {
-        const barH   = (w.count / maxCount) * maxH;
-        const x      = startX + i * (barW + gap);
-        const y      = baseY - barH;
-        const isPeak = w.count === maxCount;
-        const isHov  = hovered === i;
-        const isSel  = activeWeek === i;
-        const fill   = isSel ? "url(#barGradActive)" : isPeak ? "url(#barGrad)" : "url(#barGradDim)";
-        const labelColor = isSel ? "#C9BEFF" : isPeak ? "#6367FF" : "var(--fg-muted)";
+    <div className="space-y-3 max-h-80 overflow-y-auto">
+      {sortedSessions.map((session, i) => {
+        const date = new Date(session.timestamp).toLocaleDateString();
+        const time = new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const diffStyle = session.difficulty === "Easy" ? { bg: "rgba(34,197,94,0.15)", color: "#22c55e" } :
+                         session.difficulty === "Moderate" ? { bg: "rgba(245,158,11,0.15)", color: "#f59e0b" } :
+                         { bg: "rgba(239,68,68,0.15)", color: "#ef4444" };
+        
         return (
-          <g key={i} style={{ cursor: "pointer" }} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} onClick={() => onSelect(i)}>
-            {(isHov || isSel) && <rect x={x - 3} y={y - 3} width={barW + 6} height={barH + 6} rx="10" fill="rgba(99,103,255,0.08)" />}
-            <rect x={x + 2} y={y + 3} width={barW} height={barH} rx="8" fill="rgba(99,103,255,0.08)" />
-            <rect x={x} y={y} width={barW} height={barH} rx="8" fill={fill} style={{ transition: "fill 0.2s" }} />
-            <text x={x + barW / 2} y={y - 8} textAnchor="middle" fontSize="14" fontWeight="700" fill={labelColor} fontFamily="var(--font-body)">{w.count}</text>
-            <text x={x + barW / 2} y={H - 8} textAnchor="middle" fontSize="10" fill={isSel ? "var(--fg)" : "var(--fg-muted)"} fontFamily="var(--font-body)">{w.week}</text>
-            {isSel && <circle cx={x + barW / 2} cy={baseY + 10} r="3" fill="#C9BEFF" />}
-          </g>
+          <div key={session.sessionId} className="rounded-xl p-3 transition-all hover:scale-[1.01]"
+            style={{ background: "var(--primary-dim)", border: "1px solid var(--border)" }}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-semibold text-sm">{session.trailName}</span>
+                  <span className="rounded-full px-2 py-0.5 text-xs font-bold" style={diffStyle}>
+                    {session.difficulty}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs" style={{ color: "var(--fg-muted)" }}>
+                  <span>{session.distance}</span>
+                  <span>{session.estimatedSteps} steps</span>
+                  <span>{session.estimatedCalories} cal</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-semibold" style={{ color: "var(--fg)" }}>{date}</div>
+                <div className="text-xs" style={{ color: "var(--fg-muted)" }}>{time}</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center gap-3 text-xs">
+                <span>Mood: {session.moodBefore} → {session.moodAfter}</span>
+                {session.moodImprovement > 0 && (
+                  <span className="font-bold" style={{ color: "#22c55e" }}>+{session.moodImprovement} lift</span>
+                )}
+              </div>
+              <div className="text-xs" style={{ color: session.completed ? "#22c55e" : "var(--fg-muted)" }}>
+                {session.completed ? "✓ Completed" : "Manual finish"}
+              </div>
+            </div>
+          </div>
         );
       })}
     </svg>
@@ -186,45 +270,30 @@ function BurnoutSparkline() {
   const areaD = `${lineD} L ${xPos(n - 1)},${baseY} L ${pad.l},${baseY} Z`;
   const hovP = hovered !== null ? burnoutTrend[hovered] : null;
 
+  // If totalCalories is not provided, estimate from sessions
+  let totalCalories = stats.totalCalories;
+  if (typeof totalCalories !== "number" && Array.isArray(stats.sessions)) {
+    totalCalories = stats.sessions.reduce(
+      (sum: number, s: any) => sum + (s.estimatedCalories ?? estimateCalories(s.distance)),
+      0
+    );
+  }
   return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ cursor: "crosshair" }}>
-        <defs>
-          <linearGradient id="burnGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#8494FF" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#8494FF" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-        <path d={areaD} fill="url(#burnGrad)" />
-        <path d={lineD} fill="none" stroke="#8494FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={xPos(0)}     cy={yPos(burnoutTrend[0].score)}     r="5" fill="#ef4444" />
-        <circle cx={xPos(0)}     cy={yPos(burnoutTrend[0].score)}     r="9" fill="#ef4444" opacity="0.15" />
-        <circle cx={xPos(n - 1)} cy={yPos(burnoutTrend[n - 1].score)} r="5" fill="#22c55e" />
-        <circle cx={xPos(n - 1)} cy={yPos(burnoutTrend[n - 1].score)} r="9" fill="#22c55e" opacity="0.15" />
-        {burnoutTrend.map((p, i) => {
-          const x = xPos(i), y = yPos(p.score), isHov = hovered === i;
-          return (
-            <g key={i}>
-              <rect x={x - pw / n / 2} y={pad.t} width={pw / n} height={ph} fill="transparent"
-                onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} />
-              {isHov && (
-                <g>
-                  <line x1={x} y1={pad.t} x2={x} y2={baseY} stroke="var(--border)" strokeWidth="1" strokeDasharray="3 3" />
-                  <circle cx={x} cy={y} r="5" fill="#8494FF" />
-                  <circle cx={x} cy={y} r="9" fill="#8494FF" opacity="0.15" />
-                  <rect x={x - 20} y={y - 26} width={40} height={18} rx="5" fill="#8494FF" opacity="0.9" />
-                  <text x={x} y={y - 13} textAnchor="middle" fontSize="10" fontWeight="700" fill="white" fontFamily="var(--font-body)">{p.score} / 5</text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      {hovP && (
-        <p className="text-center text-xs mt-1" style={{ color: "var(--fg-muted)" }}>
-          Day {hovP.day} — Burnout score: <span className="font-bold" style={{ color: "#8494FF" }}>{hovP.score}/5</span>
-        </p>
-      )}
+    <div className="grid gap-2 md:grid-cols-2">
+      {[
+        { label: "Total walks completed", value: stats.totalSessions || 0, color: "var(--fg)" },
+        { label: "Total distance covered", value: `${stats.totalDistance || 0} miles`, color: "#6367FF" },
+        { label: "Calories burned", value: `${stats.totalCalories || 0} kcal`, color: "#22c55e" },
+        { label: "Average mood improvement", value: `+${stats.averageMoodImprovement?.toFixed(1) || 0}`, color: "#C9BEFF" },
+        { label: "Favorite difficulty", value: stats.favoriteDifficulty || "Unknown", color: "#f59e0b" },
+        { label: "Walking consistency", value: stats.totalSessions > 0 ? "Active walker" : "Getting started", color: "var(--fg)" },
+      ].map(({ label, value, color }) => (
+        <div key={label} className="flex items-center justify-between rounded-xl px-3 py-2.5 transition-all hover:scale-[1.01]"
+          style={{ background: "var(--primary-dim)" }}>
+          <span className="text-sm" style={{ color: "var(--fg-muted)" }}>{label}</span>
+          <span className="text-sm font-bold tabular-nums" style={{ color }}>{value}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -236,32 +305,57 @@ export default function StatsPage() {
   const [activeWeek, setActiveWeek] = useState<number | null>(null);
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
+  // Use backend hooks for walking sessions data
+  const {
+    data: historyData,
+    loading: loadingHistory,
+    error: historyError,
+    refetch: refetchHistory
+  } = useBackendApi(
+    (session) => createClientBackendApi(session).walkingSessions.getHistory(),
+    []
+  );
+
+  const {
+    data: statsData,
+    loading: loadingStats,
+    error: statsError,
+    refetch: refetchStats
+  } = useBackendApi(
+    (session) => createClientBackendApi(session).walkingSessions.getStats(),
+    []
+  );
+
   const statCards = [
-    { value: "+1.9",   label: "Avg mood lift",  sub: "over 30 days",       color: "#6367FF" },
-    { value: "16",     label: "Total walks",     sub: "last 30 days",       color: "#8494FF" },
-    { value: "4",      label: "Walks this week", sub: "↑ 1 from last week", color: "#6367FF" },
-    { value: "5 days", label: "Best streak",     sub: "consecutive days",   color: "#C9BEFF" },
+    { value: statsData?.totalSessions?.toString() || "0", label: "Total walks", sub: "all time", color: "#6367FF" },
+    { value: statsData?.totalDistance ? `${statsData.totalDistance} mi` : "0 mi", label: "Distance walked", sub: "all time", color: "#8494FF" },
+    { value: statsData?.totalCalories?.toString() || "0", label: "Calories burned", sub: "estimated total", color: "#22c55e" },
+    { value: statsData?.averageMoodImprovement ? `+${statsData.averageMoodImprovement.toFixed(1)}` : "+0", label: "Avg mood lift", sub: "per session", color: "#C9BEFF" },
   ];
 
   const selectedWeek = activeWeek !== null ? weeklyWalkCounts[activeWeek] : null;
 
   return (
     <section className="space-y-6 animate-fade-in-up">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {statCards.map(({ value, label, sub, color }) => {
-          const isActive = activeCard === label;
-          return (
-            <button key={label} type="button" onClick={() => setActiveCard(prev => prev === label ? null : label)}
-              className="pw-card flex flex-col text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
-              style={{ border: isActive ? `1.5px solid ${color}` : undefined, boxShadow: isActive ? `0 0 0 3px ${color}18, var(--shadow)` : undefined }}>
-              <span className="text-3xl font-bold leading-none tabular-nums" style={{ color }}>{value}</span>
-              <span className="mt-2 text-xs font-bold">{label}</span>
-              <span className="mt-0.5 text-[10px]" style={{ color: "var(--fg-muted)" }}>{sub}</span>
-              {isActive && <span className="mt-2 text-[10px] font-semibold" style={{ color }}>Selected ✓</span>}
-            </button>
-          );
-        })}
-      </div>
+      {loadingStats ? (
+        <StatCardsSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {statCards.map(({ value, label, sub, color }) => {
+            const isActive = activeCard === label;
+            return (
+              <button key={label} type="button" onClick={() => setActiveCard(prev => prev === label ? null : label)}
+                className="pw-card flex flex-col text-left transition-all hover:scale-[1.02] active:scale-[0.98]"
+                style={{ border: isActive ? `1.5px solid ${color}` : undefined, boxShadow: isActive ? `0 0 0 3px ${color}18, var(--shadow)` : undefined }}>
+                <span className="text-3xl font-bold leading-none tabular-nums" style={{ color }}>{value}</span>
+                <span className="mt-2 text-xs font-bold">{label}</span>
+                <span className="mt-0.5 text-[10px]" style={{ color: "var(--fg-muted)" }}>{sub}</span>
+                {isActive && <span className="mt-2 text-[10px] font-semibold" style={{ color }}>Selected ✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="grid gap-5 md:grid-cols-[3fr_2fr]">
         <div className="pw-card-lg space-y-2">
@@ -270,18 +364,13 @@ export default function StatsPage() {
               <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Mood Trend</p>
               <p className="text-base font-bold mt-0.5">Before vs. After Walk</p>
             </div>
-            <div className="flex rounded-xl overflow-hidden shrink-0" style={{ border: "1px solid var(--border)" }}>
-              {([7, 14, 30] as Range[]).map(r => (
-                <button key={r} type="button" onClick={() => setRange(r)}
-                  className="px-3 py-1.5 text-xs font-bold transition-all"
-                  style={{ background: range === r ? "var(--primary)" : "transparent", color: range === r ? "#fff" : "var(--fg-muted)" }}>
-                  {r}D
-                </button>
-              ))}
-            </div>
+            {!loadingHistory && (
+              <div className="text-xs" style={{ color: "var(--fg-muted)" }}>
+                {historyData?.sessions?.length || 0} sessions
+              </div>
+            )}
           </div>
-          <MoodLineChart range={range} showBefore={showBefore} onToggleBefore={() => setShowBefore(p => !p)}
-            showAfter={showAfter} onToggleAfter={() => setShowAfter(p => !p)} />
+          {loadingHistory ? <MoodChartSkeleton /> : <MoodTrendChart sessions={historyData?.sessions || []} />}
         </div>
 
         <div className="pw-card-lg space-y-2">
@@ -291,14 +380,7 @@ export default function StatsPage() {
               {selectedWeek ? `${selectedWeek.week} — ${selectedWeek.count} walks` : "Walks per week"}
             </p>
           </div>
-          <WeeklyBarChart activeWeek={activeWeek} onSelect={i => setActiveWeek(prev => prev === i ? null : i)} />
-          {selectedWeek && (
-            <div className="rounded-xl px-3 py-2 text-xs text-center animate-fade-in"
-              style={{ background: "rgba(201,190,255,0.12)", color: "#8494FF" }}>
-              Week of {selectedWeek.week} · {selectedWeek.count} walks completed
-              {selectedWeek.count === Math.max(...weeklyWalkCounts.map(w => w.count)) && <span className="ml-1 font-bold">🏆 Best week</span>}
-            </div>
-          )}
+          {loadingHistory ? <WalkingHistorySkeleton /> : <WalkingHistoryList sessions={historyData?.sessions || []} />}
         </div>
       </div>
 
@@ -308,34 +390,13 @@ export default function StatsPage() {
             <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "var(--accent1)" }}>Burnout Trend</p>
             <p className="text-base font-bold mt-0.5">30-day burnout score</p>
           </div>
-          <button type="button" className="rounded-full px-3 py-1 text-xs font-bold transition-all hover:scale-105 active:scale-95"
-            style={{ background: "rgba(34,197,94,0.12)", color: "#16a34a" }}>↓ Improving</button>
-        </div>
-        <BurnoutSparkline />
-        <div className="flex justify-between text-xs" style={{ color: "var(--fg-muted)" }}>
-          <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-red-500" />High burnout · Feb 27</span>
-          <span className="flex items-center gap-1.5">Lower · Mar 28<span className="inline-block h-2 w-2 rounded-full bg-green-500" /></span>
-        </div>
-      </div>
-
-      <div className="pw-card">
-        <p className="text-sm font-bold mb-4">Last 30 days — summary</p>
-        <div className="grid gap-2 md:grid-cols-2">
-          {[
-            { label: "Total walks",           value: "16",      color: "var(--fg)"  },
-            { label: "Average before mood",   value: "2.1 / 5", color: "#8494FF"    },
-            { label: "Average after mood",    value: "4.0 / 5", color: "#C9BEFF"    },
-            { label: "Average lift per walk", value: "+1.9",    color: "#6367FF"    },
-            { label: "Best streak",           value: "5 days",  color: "var(--fg)"  },
-            { label: "Best walk day",         value: "Tuesday", color: "#6367FF"    },
-          ].map(({ label, value, color }) => (
-            <div key={label} className="flex items-center justify-between rounded-xl px-3 py-2.5 transition-all hover:scale-[1.01] cursor-default"
-              style={{ background: "var(--primary-dim)" }}>
-              <span className="text-sm" style={{ color: "var(--fg-muted)" }}>{label}</span>
-              <span className="text-sm font-bold tabular-nums" style={{ color }}>{value}</span>
+          {statsData && (
+            <div className="text-xs px-3 py-1 rounded-full" style={{ background: "rgba(34,197,94,0.12)", color: "#16a34a" }}>
+              {statsData.favoriteDifficulty} preferred difficulty
             </div>
           ))}
         </div>
+        {loadingStats ? <StatsOverviewSkeleton /> : <StatsOverview stats={statsData} />}
       </div>
     </section>
   );

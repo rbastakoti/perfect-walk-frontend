@@ -130,52 +130,63 @@ export default function DashboardPage() {
       setView("dashboard");
     }
 
-    // Load AI Briefing and Walk Recommendation from cache
-    const cachedBriefing = AppCache.get<string>("ai-briefing");
-    if (cachedBriefing) setAiBriefing(cachedBriefing);
+    // Load AI Briefing and Walk Recommendation from cache (with 24h expiry)
+    const cachedBriefingObj = AppCache.get<{ value: string; timestamp: number }>("ai-briefing");
+    const now = Date.now();
+    const isBriefingValid = cachedBriefingObj && (now - cachedBriefingObj.timestamp < 24 * 60 * 60 * 1000);
+    if (isBriefingValid) {
+      setAiBriefing(cachedBriefingObj.value);
+    }
     let cachedRec = AppCache.get<any>("ai-walk-recommendation");
     if (cachedRec) setAiWalkRec(cachedRec);
 
-    // If not in cache, fetch AI walk recommendation using latest context
-    if (!cachedRec) {
-      // Gather latest context from cache
-      const locationData = AppCache.get<{ lat: number; lon: number }>("location");
-      const calendarData = AppCache.get<{ events: any[] }>("calendar");
-      const weatherData = AppCache.get<any>("weather");
-      const parksData = AppCache.get<any>("parks");
-      const placesData = AppCache.get<any[]>("places-all");
-      const aiPayload = {
-        user_name: "User",
-        location: locationData ? `${locationData.lat},${locationData.lon}` : undefined,
-        calendar: calendarData,
-        weather: weatherData,
-        parks: parksData?.elements ?? parksData,
-        places: placesData,
-        walk_options: [],
+    // If not in cache or expired, fetch AI briefing after all data is loaded
+    if (!isBriefingValid) {
+      // Wait for weather, calendar, parks to be loaded from cache or fetched
+      const tryGenerateBriefing = () => {
+        const locationData = AppCache.get<{ lat: number; lon: number }>("location");
+        const calendarData = AppCache.get<{ events: any[] }>("calendar");
+        const weatherData = AppCache.get<any>("weather");
+        const parksData = AppCache.get<any>("parks");
+        const placesData = AppCache.get<any[]>("places-all");
+        if (calendarData && weatherData && parksData) {
+          const aiPayload = {
+            user_name: "User",
+            location: locationData ? `${locationData.lat},${locationData.lon}` : undefined,
+            calendar: calendarData,
+            weather: weatherData,
+            parks: parksData?.elements ?? parksData,
+            places: placesData,
+            walk_options: [],
+          };
+          fetch("/api/ai/briefing", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(aiPayload),
+          })
+            .then(async r => {
+              if (!r.ok) {
+                const text = await r.text();
+                throw new Error(`AI briefing API error: ${r.status} ${text}`);
+              }
+              return r.json();
+            })
+            .then(data => {
+              if (data && data.briefing) {
+                setAiBriefing(data.briefing);
+                AppCache.set("ai-briefing", { value: data.briefing, timestamp: Date.now() });
+              }
+            })
+            .catch(err => {
+              // eslint-disable-next-line no-console
+              console.error("Error fetching AI briefing:", err);
+            });
+        } else {
+          // Retry after a short delay if not all data is loaded
+          setTimeout(tryGenerateBriefing, 500);
+        }
       };
-      fetch("/api/ai/walk-recommendation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(aiPayload),
-      })
-        .then(async r => {
-          if (!r.ok) {
-            const text = await r.text();
-            throw new Error(`AI walk-recommendation API error: ${r.status} ${text}`);
-          }
-          return r.json();
-        })
-        .then(walkRecRes => {
-          let rec = walkRecRes.recommendation || (Array.isArray(walkRecRes.recommendations) ? walkRecRes.recommendations[0] : walkRecRes.recommendations);
-          if (rec) {
-            AppCache.set("ai-walk-recommendation", rec);
-            setAiWalkRec(rec);
-          }
-        })
-        .catch(err => {
-          // eslint-disable-next-line no-console
-          console.error("Error fetching AI walk recommendation on dashboard:", err);
-        });
+      tryGenerateBriefing();
     }
 
     // ── Load weather from cache (instant) ──────────────────────────────────
