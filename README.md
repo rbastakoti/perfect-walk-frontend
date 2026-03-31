@@ -371,8 +371,8 @@ npm run build
 ## � **Team**
 
 ### **Backend, AI & Integration Team**
-- **Rajan Bastakoti** - Backend Architecture & AI Integration
-- **Manash Lamichhane** - API Development & Data Systems
+- **Rajan Bastakoti** - Backend Architecture & Data Systems
+- **Manash Lamichhane** - API Development & AI Integration
 - **Dhiraj Majhi** - Integration & Infrastructure
 
 ### **Frontend Team** 
